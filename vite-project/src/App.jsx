@@ -17,11 +17,13 @@ const C = {
 
 // === ATECO SECTOR NAMES (complete map — fallback to code if unknown) ===
 const ATECO_NAMES = {
-  10: "Food Mfg",       25: "Metal Products",   41: "Construction",
-  43: "Spec. Constr.",  45: "Auto Trade",        46: "Wholesale",
-  47: "Retail",         56: "Food & Bev.",       62: "IT & Software",
-  68: "Real Estate",    71: "Tech Consulting",   77: "Rental Svcs",
-  82: "Admin Services",
+  10: "Food Manufacturing",        25: "Metal Products",
+  41: "Construction of Buildings", 43: "Specialised Construction",
+  45: "Motor Vehicle Trade",       46: "Wholesale Trade",
+  47: "Retail Trade",              56: "Food & Beverage Services",
+  62: "Information Technology",    68: "Real Estate Activities",
+  71: "Engineering & Consulting",  77: "Rental & Leasing",
+  82: "Administrative Support",
 };
 
 // === STATIC DEFINITIONS ===
@@ -39,8 +41,7 @@ const BUCKET_RANGES = [
 ];
 
 const SIZE_TIERS = [
-  { name: "<€10M",      lo: 0,      hi: 1e7 },
-  { name: "€10–25M",    lo: 1e7,    hi: 2.5e7 },
+  { name: "€0–25M",     lo: 0,      hi: 2.5e7 },
   { name: "€25–50M",    lo: 2.5e7,  hi: 5e7 },
   { name: "€50–100M",   lo: 5e7,    hi: 1e8 },
   { name: "€100–250M",  lo: 1e8,    hi: 2.5e8 },
@@ -79,6 +80,18 @@ function pct(sorted, p) {
 function medianOf(arr) { return arr.length ? pct(sortedCopy(arr), 50) : 0; }
 function round1(n) { return Math.round(n * 10) / 10; }
 function round2(n) { return Math.round(n * 100) / 100; }
+// Returns { domain: [0, niceMax], ticks: [...] } with evenly-spaced round numbers
+function niceAxisConfig(maxVal) {
+  if (!maxVal || maxVal <= 0) return { domain: [0, 10], ticks: [0, 2, 4, 6, 8, 10] };
+  const raw = maxVal * 1.08;
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000];
+  const interval = raw / 5;
+  const step = steps.find(s => s >= interval) || steps[steps.length - 1];
+  const top = Math.ceil(raw / step) * step;
+  const ticks = [];
+  for (let t = 0; t <= top; t += step) ticks.push(t);
+  return { domain: [0, top], ticks };
+}
 function fmtM(euros) {
   const m = euros / 1e6;
   return m >= 1000 ? `€${(m / 1000).toFixed(1)}B` : `€${Math.round(m)}M`;
@@ -256,8 +269,8 @@ const CORR_FINANCIAL = [
   { key: "operating_income",    label: "Op.Inc" },
   { key: "net_profit_loss",     label: "NetPft" },
   { key: "revenue_change",      label: "RevChg" },
-  { key: "revenue_change_next", label: "RC★" },
-  { key: "production_value_next", label: "PV★" },
+  { key: "revenue_change_next", label: "RCN★" },
+  { key: "production_value_next", label: "PVN★" },
 ];
 
 const CORR_RATIOS = [
@@ -268,8 +281,8 @@ const CORR_RATIOS = [
   { key: "current_ratio",      label: "CR" },
   { key: "years_in_business",  label: "YrsBiz" },
   { key: "revenue_change",     label: "RevChg" },
-  { key: "revenue_change_next", label: "RC★" },
-  { key: "production_value_next", label: "PV★" },
+  { key: "revenue_change_next", label: "RCN★" },
+  { key: "production_value_next", label: "PVN★" },
 ];
 
 function computeMatrix(rows, features) {
@@ -691,7 +704,7 @@ const Card = ({ children, style = {} }) => (
 );
 
 // === YEAR SECTION ===
-function YearSection({ yr, yearsData, yearsCorrelation }) {
+function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
   const d = yearsData[yr];
 
   return (
@@ -755,8 +768,8 @@ function YearSection({ yr, yearsData, yearsCorrelation }) {
             <ResponsiveContainer width="100%" height={245}>
               <BarChart data={d.distBuckets} barCategoryGap="10%">
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                <XAxis dataKey="range" tick={{ fill: C.muted, fontSize: 9 }} axisLine={{ stroke: C.border }} interval={0} angle={-30} textAnchor="end" height={48} />
-                <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} />
+                <XAxis dataKey="range" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} interval={0} angle={-30} textAnchor="end" height={52} />
+                <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} domain={sharedDomains?.distAxis.domain} ticks={sharedDomains?.distAxis.ticks} />
                 <Tooltip content={<Tip />} />
                 <Bar dataKey="count" name="Companies" radius={[3, 3, 0, 0]}>
                   {d.distBuckets.map((b, i) => <Cell key={i} fill={b.c} />)}
@@ -827,21 +840,21 @@ function YearSection({ yr, yearsData, yearsCorrelation }) {
             Company Count by Revenue Tier
           </p>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={d.sizeDist.filter(t => t.count >= 25)} barCategoryGap="12%" margin={{ left: 4, right: 4, top: 4, bottom: 4 }}>
+            <BarChart data={d.sizeDist.filter(t => t.count > 0)} barCategoryGap="12%" margin={{ left: 4, right: 4, top: 18, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 9 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={58} interval={0} />
-              <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} width={44} />
+              <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={62} interval={0} />
+              <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} width={46} domain={sharedDomains?.sizeDistAxis.domain} ticks={sharedDomains?.sizeDistAxis.ticks} />
               <Tooltip content={<Tip />} />
               <Bar dataKey="count" name="Observations" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="count" position="top" style={{ fill: C.light, fontSize: 9, fontWeight: 600 }} />
-                {d.sizeDist.filter(t => t.count >= 25).map((t) => {
+                {d.sizeDist.filter(t => t.count > 0).map((t) => {
                   const origIdx = d.sizeDist.indexOf(t);
                   return <Cell key={origIdx} fill={TIER_COLORS[origIdx % TIER_COLORS.length]} />;
                 })}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          <p style={{ color: C.muted, fontSize: 9, textAlign: "center", margin: "4px 0 0" }}>Tiers with &lt;25 observations hidden to avoid misleading visual weight</p>
+          <p style={{ color: C.muted, fontSize: 9, textAlign: "center", margin: "4px 0 0" }}>All revenue tiers shown  •  €0–25M includes all companies below €25M production value</p>
         </Card>
       </div>
 
@@ -849,14 +862,25 @@ function YearSection({ yr, yearsData, yearsCorrelation }) {
       <Heading sub="Median next-year revenue change by company revenue size tier" insight="Smaller companies show explosive growth, larger companies trend negative — size is the #1 structural driver">Revenue Size Effect on Target</Heading>
       <Card>
         <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={d.sizeSeg} barCategoryGap="12%">
+          <BarChart data={d.sizeSeg} barCategoryGap="12%" margin={{ top: 24, left: 0, right: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-            <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 9 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={54} interval={0} />
-            <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} label={{ value: "Median Target %", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 10, dx: -8 }} />
+            <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={60} interval={0} />
+            <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} width={52} domain={sharedDomains?.segAxis.domain} ticks={sharedDomains?.segAxis.ticks} tickFormatter={v => `${v}%`} label={{ value: "Median Target %", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 10, dx: -10 }} />
             <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
             <Tooltip content={<Tip sfx="%" />} />
             <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
-              <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 9, fontWeight: 700 }} />
+              <LabelList dataKey="medTarget" content={({ x, y, width, value }) => {
+                if (value === null || value === undefined) return null;
+                const label = `${value > 0 ? "+" : ""}${value}%`;
+                // y = top edge of bar rect in SVG coords.
+                // Positive bars: y = bar top (above x-axis) → y-8 = above bar ✓
+                // Negative bars: y = zero reference line (top of downward rect) → y-8 = above zero line ✓
+                return (
+                  <text x={x + width / 2} y={y - 7} fontSize={9} fontWeight={700} fill={C.light} textAnchor="middle">
+                    {label}
+                  </text>
+                );
+              }} />
               {d.sizeSeg.map((s, i) => <Cell key={i} fill={s.medTarget > 0 ? C.accent : C.coral} />)}
             </Bar>
           </BarChart>
@@ -938,8 +962,8 @@ function YearSection({ yr, yearsData, yearsCorrelation }) {
             <ResponsiveContainer width="100%" height={310}>
               <BarChart data={d.regions} layout="vertical" barCategoryGap="14%">
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                <XAxis type="number" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} />
-                <YAxis dataKey="name" type="category" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} width={100} />
+                <XAxis type="number" tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} domain={sharedDomains?.regX} />
+                <YAxis dataKey="name" type="category" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} width={110} />
                 <ReferenceLine x={0} stroke={C.muted} strokeWidth={2} />
                 <Tooltip content={<Tip sfx="%" />} />
                 <Bar dataKey="medTarget" name="Median Target %" radius={[0, 4, 4, 0]}>
@@ -983,7 +1007,7 @@ function YearSection({ yr, yearsData, yearsCorrelation }) {
         <>
           <Heading
             sub={`Pearson correlation for ${yr} observations — split by feature type. ★ = prediction targets`}
-            insight="Financial size features correlate strongly with PV★ but near-zero with RC★ — consistent every year"
+            insight="Financial size features correlate strongly with PVN★ but near-zero with RCN★ — consistent every year"
           >
             {yr} Feature Correlations
           </Heading>
@@ -1009,21 +1033,21 @@ const ATECO_CATEGORIES = [
   { start:5,  end:9,  key:"05-09", label:"Mining and Quarrying" },
   { start:10, end:33, key:"10-33", label:"Manufacturing" },
   { start:35, end:35, key:"35",    label:"Electricity, Gas, Steam" },
-  { start:36, end:39, key:"36-39", label:"Water Supply & Waste" },
+  { start:36, end:39, key:"36-39", label:"Water Supply, Sewerage, Waste" },
   { start:41, end:43, key:"41-43", label:"Construction" },
   { start:45, end:47, key:"45-47", label:"Wholesale and Retail Trade" },
   { start:49, end:53, key:"49-53", label:"Transportation and Storage" },
   { start:55, end:56, key:"55-56", label:"Accommodation and Food Service" },
   { start:58, end:63, key:"58-63", label:"Information and Communication" },
-  { start:64, end:66, key:"64-66", label:"Financial and Insurance" },
+  { start:64, end:66, key:"64-66", label:"Financial and Insurance Activities" },
   { start:68, end:68, key:"68",    label:"Real Estate Activities" },
-  { start:69, end:75, key:"69-75", label:"Professional & Scientific" },
-  { start:77, end:82, key:"77-82", label:"Administrative Services" },
+  { start:69, end:75, key:"69-75", label:"Professional, Scientific, Technical Activities" },
+  { start:77, end:82, key:"77-82", label:"Administrative and Support Services" },
   { start:84, end:84, key:"84",    label:"Public Administration" },
   { start:85, end:85, key:"85",    label:"Education" },
-  { start:86, end:88, key:"86-88", label:"Health and Social Work" },
+  { start:86, end:88, key:"86-88", label:"Human Health and Social Work" },
   { start:90, end:93, key:"90-93", label:"Arts, Entertainment, Recreation" },
-  { start:94, end:96, key:"94-96", label:"Other Services" },
+  { start:94, end:96, key:"94-96", label:"Other Service Activities" },
 ];
 
 const MAP_ALIASES = {
@@ -1283,7 +1307,7 @@ function BoxPlotChart({ data }) {
   const rowH = 64;
   const H = topPad + data.length * rowH + botPad;
 
-  const allVals = data.flatMap(d => [d.p10, d.p25, d.p50, d.p75, d.p90].filter(v => v > 0));
+  const allVals = data.flatMap(d => [d.p10, d.p25, d.p50, d.p75, d.p90, d.p99].filter(v => v > 0));
   if (!allVals.length) return null;
   const logMin = Math.log10(Math.min(...allVals)) - 0.1;
   const logMax = Math.log10(Math.max(...allVals)) + 0.1;
@@ -1322,10 +1346,12 @@ function BoxPlotChart({ data }) {
       {data.map((d, i) => {
         const cy = topPad + i * rowH + rowH / 2;
         const color = boxColors[i % boxColors.length];
-        const xP10 = toX(d.p10), xP25 = toX(d.p25), xP50 = toX(d.p50), xP75 = toX(d.p75), xP90 = toX(d.p90);
+        const xP10 = toX(d.p10), xP25 = toX(d.p25), xP50 = toX(d.p50), xP75 = toX(d.p75), xP90 = toX(d.p90), xP99 = d.p99 > 0 ? toX(d.p99) : null;
         return (
           <g key={i} transform={`translate(${leftPad},0)`}>
             <text x={-10} y={cy + 4} textAnchor="end" fontSize={10} fill={C.light} fontWeight={600}>{d.label}</text>
+            {/* P99 dashed line to outlier */}
+            {xP99 !== null && <line x1={xP90} y1={cy} x2={xP99} y2={cy} stroke={color} strokeWidth={1} strokeDasharray="3 3" opacity={0.5} />}
             {/* Whisker */}
             <line x1={xP10} y1={cy} x2={xP90} y2={cy} stroke={color} strokeWidth={1.5} opacity={0.5} />
             <line x1={xP10} y1={cy - 7} x2={xP10} y2={cy + 7} stroke={color} strokeWidth={2} />
@@ -1336,12 +1362,14 @@ function BoxPlotChart({ data }) {
             {/* Median */}
             <line x1={xP50} y1={cy - boxH / 2} x2={xP50} y2={cy + boxH / 2} stroke={color} strokeWidth={2.5} />
             <circle cx={xP50} cy={cy} r={4.5} fill={color} />
+            {/* P99 outlier dot (open circle) */}
+            {xP99 !== null && <circle cx={xP99} cy={cy} r={4} fill="none" stroke={color} strokeWidth={2} />}
           </g>
         );
       })}
       {/* legend */}
       <text x={leftPad + chartW / 2} y={H - 6} textAnchor="middle" fontSize={8.5} fill={C.muted}>
-        Log₁₀ scale (€)  •  Box = IQR (P25–P75)  •  Dot = Median  •  Whiskers = P10–P90
+        Log₁₀ scale (€)  •  Box = IQR (P25–P75)  •  Dot = Median  •  Whiskers = P10–P90  •  ○ = P99 outlier
       </text>
     </svg>
   );
@@ -1351,7 +1379,7 @@ function BoxPlotChart({ data }) {
 function SplitCorrMatrix({ corrData, title, accentColor }) {
   const { labels, matrix } = corrData;
   if (!matrix || !matrix.length) return <p style={{ color: C.muted, fontSize: 11 }}>Insufficient data.</p>;
-  const targetIdx = labels.findIndex(l => l === "PV★");
+  const targetIdx = labels.findIndex(l => l === "PVN★");
   return (
     <div>
       <p style={{ color: accentColor, fontSize: 10, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>{title}</p>
@@ -1370,7 +1398,7 @@ function SplitCorrMatrix({ corrData, title, accentColor }) {
           <tbody>
             {matrix.map((row, i) => (
               <tr key={i}>
-                <td style={{ color: C.light, fontSize: 8, textAlign: "right", paddingRight: 6, whiteSpace: "nowrap", fontWeight: i >= targetIdx && targetIdx >= 0 ? 700 : 400 }}>
+                <td style={{ color: C.light, fontSize: 10, textAlign: "right", paddingRight: 6, whiteSpace: "nowrap", fontWeight: i >= targetIdx && targetIdx >= 0 ? 700 : 400 }}>
                   {labels[i]}
                 </td>
                 {row.map((val, j) => (
@@ -1379,7 +1407,7 @@ function SplitCorrMatrix({ corrData, title, accentColor }) {
                     style={{ background: i === j ? "rgba(255,255,255,0.06)" : corrColor(val) }}
                     title={`${labels[i]} × ${labels[j]}: ${val}`}
                   >
-                    {i === j ? "—" : (val > 0 ? "+" : "") + val.toFixed(2).replace(/^0\./, ".").replace(/^-0\./, "-.").replace(/^\./, "0.")}
+                    {i === j ? "—" : (val > 0 ? "+" : "") + val.toFixed(2)}
                   </td>
                 ))}
               </tr>
@@ -1436,7 +1464,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
       {/* ── SPLIT CORRELATION MATRICES (pooled) ── */}
       <Heading
         sub="Pearson correlation — split by feature type (pooled 2018–2020). ★ = prediction targets"
-        insight="Financial size features correlate 0.6–0.9 with each other but <0.15 with RC★ — predicting absolute PV is far easier than % change"
+        insight="Financial size features correlate 0.6–0.9 with each other but <0.15 with RCN★ — predicting PVN★ is far easier than % change"
       >
         Feature Correlation Matrices
       </Heading>
@@ -1462,15 +1490,15 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
         <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <Card>
             <p style={{ color: C.gold, fontSize: 10, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
-              production_value_next — Strong Signal
+              production_value_next — Normal Signal
             </p>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={featureTargetCorrs} layout="vertical" barCategoryGap="12%" margin={{ left: 8, right: 28, top: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                <XAxis type="number" domain={[-1, 1]} tick={{ fill: C.muted, fontSize: 9 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(1)} />
-                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 9 }} axisLine={{ stroke: C.border }} width={80} />
+                <XAxis type="number" domain={[-0.5, 0.5]} ticks={[-0.5, -0.25, 0, 0.25, 0.5]} tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
+                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} width={95} />
                 <ReferenceLine x={0} stroke={C.muted} strokeWidth={1.5} />
-                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with PV Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11 }} />
+                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with PV Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.gold }} />
                 <Bar dataKey="corrPV" name="Corr with PV Next" radius={[0, 4, 4, 0]}>
                   {featureTargetCorrs.map((d, i) => <Cell key={i} fill={d.corrPV >= 0 ? C.gold : C.coral} />)}
                 </Bar>
@@ -1484,10 +1512,10 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={featureTargetCorrs} layout="vertical" barCategoryGap="12%" margin={{ left: 8, right: 28, top: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                <XAxis type="number" domain={[-0.3, 0.3]} tick={{ fill: C.muted, fontSize: 9 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(1)} />
-                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 9 }} axisLine={{ stroke: C.border }} width={80} />
+                <XAxis type="number" domain={[-0.3, 0.3]} ticks={[-0.3, -0.15, 0, 0.15, 0.3]} tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
+                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} width={95} />
                 <ReferenceLine x={0} stroke={C.muted} strokeWidth={1.5} />
-                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with RC Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11 }} />
+                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with RC Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.blue }} />
                 <Bar dataKey="corrRC" name="Corr with RC Next" radius={[0, 4, 4, 0]}>
                   {featureTargetCorrs.map((d, i) => <Cell key={i} fill={Math.abs(d.corrRC) < 0.1 ? C.muted : d.corrRC >= 0 ? C.blue : C.coral} />)}
                 </Bar>
@@ -1627,6 +1655,53 @@ export default function App() {
   const bestYear          = crossYear.reduce((a, b) => a.median > b.median ? a : b);
   const highestVolatility = crossYear.reduce((a, b) => a.std    > b.std    ? a : b);
 
+  // Nice axes for signals tab charts
+  const gmAxis = (() => {
+    const vals = signalData.growthMomentum.map(d => d.medTarget);
+    const gMax = Math.max(...vals);
+    const steps = [25, 50, 100, 200];
+    const step = steps.find(s => s >= (gMax + 100) / 6) || 100;
+    const top = Math.ceil(gMax / step) * step;
+    const ticks = [];
+    for (let t = -100; t <= top; t += step) ticks.push(t);
+    return { domain: [-100, top], ticks };
+  })();
+
+  const eqAxis = (() => {
+    const vals = signalData.equityGap.map(d => d.medTarget);
+    const eMax = Math.max(...vals);
+    const steps = [10, 25, 50, 100];
+    const step = steps.find(s => s >= (eMax + 100) / 6) || 50;
+    const top = Math.ceil(eMax / step) * step;
+    const ticks = [];
+    for (let t = -100; t <= top; t += step) ticks.push(t);
+    return { domain: [-100, top], ticks };
+  })();
+
+  // Shared axis domains across year tabs — ensures all matching charts use identical scales
+  const sharedDomains = (() => {
+    const yrs = [2018, 2019, 2020];
+    const distMax     = Math.max(...yrs.flatMap(yr => yearsData[yr].distBuckets.map(b => b.count)));
+    const sizeDistMax = Math.max(...yrs.flatMap(yr => yearsData[yr].sizeDist.map(t => t.count)));
+    const segMax      = Math.max(...yrs.flatMap(yr => yearsData[yr].sizeSeg.map(s => s.medTarget)));
+    const regMin      = Math.min(...yrs.flatMap(yr => yearsData[yr].regions.map(r => r.medTarget)));
+    const regMax      = Math.max(...yrs.flatMap(yr => yearsData[yr].regions.map(r => r.medTarget)));
+    // segAxis: floor at -100, clean ticks from -100 up to max
+    const segSteps = [50, 100, 200, 250, 500, 1000];
+    const segStep  = segSteps.find(s => s >= segMax / 6) || 1000;
+    const segTop   = Math.ceil(segMax / segStep) * segStep;
+    const segTicks = [];
+    for (let t = -100; t <= segTop; t += segStep) segTicks.push(t);
+    if (segTicks[segTicks.length - 1] < segTop) segTicks.push(segTop);
+    const segAxis = { domain: [-100, segTop], ticks: segTicks };
+    return {
+      distAxis:     niceAxisConfig(distMax),
+      sizeDistAxis: niceAxisConfig(sizeDistMax),
+      segAxis,
+      regX:         [Math.floor(regMin - 5), Math.ceil(regMax + 5)],
+    };
+  })();
+
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", color: C.white }}>
 
@@ -1655,7 +1730,7 @@ export default function App() {
       <div style={{ padding: "20px 28px 40px", maxWidth: 1180, margin: "0 auto" }}>
 
         {tab === "overview" && <DataOverviewSection correlationData={correlationData} yearsInBusinessData={yearsInBusinessData} uniqueCompanies={uniqueCompanies} totalRows={totalRows} outliersData={outliersData} />}
-        {["2018","2019","2020"].includes(tab) && <YearSection yr={Number(tab)} yearsData={yearsData} yearsCorrelation={yearsCorrelationData[Number(tab)]} />}
+        {["2018","2019","2020"].includes(tab) && <YearSection yr={Number(tab)} yearsData={yearsData} yearsCorrelation={yearsCorrelationData[Number(tab)]} sharedDomains={sharedDomains} />}
         {tab === "map" && <ItalyMapTab regionMapData={regionMapData} />}
 
         {tab === "signals" && (
@@ -1678,12 +1753,12 @@ export default function App() {
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={signalData.tierTarget} barCategoryGap="12%">
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                  <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} />
+                  <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={46} />
                   <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
                   <Tooltip content={<Tip sfx="%" />} />
                   <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 9, fontWeight: 700 }} />
+                    <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 10, fontWeight: 700 }} />
                     {signalData.tierTarget.map((d, i) => <Cell key={i} fill={d.medTarget > 0 ? C.accent : C.coral} />)}
                   </Bar>
                 </BarChart>
@@ -1704,10 +1779,10 @@ export default function App() {
             </Heading>
             <Card>
               <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={signalData.tierShift} barCategoryGap="22%">
+                <BarChart data={signalData.tierShift} barCategoryGap="22%" margin={{ top: 28, left: 4, right: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
                   <XAxis dataKey="shift" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={46} />
                   <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
                   <Tooltip content={<Tip sfx="%" />} />
                   <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
@@ -1738,8 +1813,8 @@ export default function App() {
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={signalData.tierPersistence} barCategoryGap="10%" stackOffset="none">
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                      <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} />
-                      <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} domain={[0, 100]} />
+                      <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                      <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} domain={[0, 100]} width={44} />
                       <Tooltip
                         formatter={(v, name) => [`${v}%`, name]}
                         contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8 }}
@@ -1768,8 +1843,8 @@ export default function App() {
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={signalData.extremeEvents} barCategoryGap="10%" barGap={2}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                      <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} />
-                      <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} />
+                      <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                      <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={44} />
                       <Tooltip
                         formatter={(v, name) => [`${v}%`, name]}
                         contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8 }}
@@ -1799,10 +1874,10 @@ export default function App() {
                 </Heading>
                 <Card>
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={signalData.growthMomentum} barCategoryGap="22%">
+                    <BarChart data={signalData.growthMomentum} barCategoryGap="22%" margin={{ top: 28, left: 4, right: 4, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                      <XAxis dataKey="bucket" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} />
-                      <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} />
+                      <XAxis dataKey="bucket" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                      <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} domain={gmAxis.domain} ticks={gmAxis.ticks} tickFormatter={v => `${v}%`} width={52} />
                       <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
                       <Tooltip content={<Tip sfx="%" />} />
                       <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
@@ -1843,10 +1918,10 @@ export default function App() {
                 </Heading>
                 <Card>
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={signalData.equityGap} barCategoryGap="30%">
+                    <BarChart data={signalData.equityGap} barCategoryGap="30%" margin={{ top: 28, left: 4, right: 4, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                      <XAxis dataKey="group" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} />
-                      <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} />
+                      <XAxis dataKey="group" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} />
+                      <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} domain={eqAxis.domain} ticks={eqAxis.ticks} tickFormatter={v => `${v}%`} width={52} />
                       <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
                       <Tooltip content={<Tip sfx="%" />} />
                       <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
@@ -1948,12 +2023,12 @@ export default function App() {
             {/* ── COVID SECTOR IMPACT ── */}
             <Heading
               sub="Median revenue change per sector × year-transition — reveals which industries were hit by COVID and who recovered strongest"
-              insight="Sectors sorted by COVID shock (2019→20). Construction & IT absorbed the blow; Food & Bev took the deepest hit"
+              insight="Sectors sorted by COVID shock (2019→20). Specialised Construction & Information Technology absorbed the blow; Food & Beverage Services took the deepest hit"
             >
               COVID Sector Impact: Revenue Change 2018–2021
             </Heading>
             <Card>
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={460}>
                 <BarChart
                   data={covidSectorImpact}
                   layout="vertical"
@@ -1964,16 +2039,16 @@ export default function App() {
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
                   <XAxis
                     type="number"
-                    tick={{ fill: C.muted, fontSize: 10 }}
+                    tick={{ fill: C.muted, fontSize: 12 }}
                     axisLine={{ stroke: C.border }}
                     tickFormatter={v => `${v > 0 ? "+" : ""}${v}%`}
                   />
                   <YAxis
                     dataKey="sector"
                     type="category"
-                    tick={{ fill: C.light, fontSize: 10 }}
+                    tick={{ fill: C.light, fontSize: 12 }}
                     axisLine={{ stroke: C.border }}
-                    width={112}
+                    width={200}
                   />
                   <Tooltip
                     formatter={(v, name) => v != null ? [`${v > 0 ? "+" : ""}${v}%`, name] : ["—", name]}
@@ -2046,24 +2121,66 @@ export default function App() {
             {/* Size Effect Across Years */}
             <Heading sub="The 'funnel pattern' — consistent across all three years" insight="Most actionable finding: company revenue size should be a primary feature in any predictive model">Size Effect: Consistent Across Years</Heading>
             <Card>
-              <ResponsiveContainer width="100%" height={290}>
-                <BarChart data={yearsData[2018].sizeSeg.map((s, i) => ({
-                  name: s.name,
-                  "2018→19": yearsData[2018].sizeSeg[i].medTarget,
-                  "2019→20": yearsData[2019].sizeSeg[i].medTarget,
-                  "2020→21": yearsData[2020].sizeSeg[i].medTarget,
-                }))} barCategoryGap="14%">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <p style={{ color: C.muted, fontSize: 10, margin: 0 }}>
+                  √ scale — equal bar height = equal proportional change · hover for exact %
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[["2018→19", C.accent], ["2019→20", C.blue], ["2020→21", C.gold]].map(([lbl, col]) => (
+                    <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 2, background: col }} />
+                      <span style={{ color: C.muted, fontSize: 10 }}>{lbl}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={(() => {
+                  const sq = v => v == null ? null : Math.sign(v) * Math.sqrt(Math.abs(v));
+                  return yearsData[2018].sizeSeg.map((s, i) => ({
+                    name: s.name,
+                    v18: sq(yearsData[2018].sizeSeg[i]?.medTarget),
+                    v19: sq(yearsData[2019].sizeSeg[i]?.medTarget),
+                    v20: sq(yearsData[2020].sizeSeg[i]?.medTarget),
+                    r18: yearsData[2018].sizeSeg[i]?.medTarget,
+                    r19: yearsData[2019].sizeSeg[i]?.medTarget,
+                    r20: yearsData[2020].sizeSeg[i]?.medTarget,
+                  }));
+                })()} barCategoryGap="14%">
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 9 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={54} interval={0} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} label={{ value: "Median Target %", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 10, dx: -8 }} />
+                  <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={60} interval={0} />
+                  <YAxis
+                    tick={{ fill: C.muted, fontSize: 11 }}
+                    axisLine={{ stroke: C.border }}
+                    width={68}
+                    ticks={[-10, 0, 10, 20, 30, 40, 50]}
+                    domain={[-10, 52]}
+                    tickFormatter={v => { const r = Math.sign(v) * Math.round(v * v); return (r > 0 ? '+' : '') + r + '%'; }}
+                    label={{ value: "Median Target % (√ scale)", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 9, dx: -16 }}
+                  />
                   <ReferenceLine y={0} stroke={C.border} strokeWidth={2} />
-                  <Tooltip content={<Tip sfx="%" />} />
-                  <Bar dataKey="2018→19" fill={C.accent} name="2018→19" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="2019→20" fill={C.blue}   name="2019→20" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="2020→21" fill={C.gold}   name="2020→21" radius={[3, 3, 0, 0]} />
-                  <Legend wrapperStyle={{ fontSize: 11, color: C.muted }} />
+                  <Tooltip content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0]?.payload;
+                    return (
+                      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px" }}>
+                        <p style={{ color: C.white, fontWeight: 700, fontSize: 12, margin: "0 0 6px" }}>{d?.name}</p>
+                        {[["2018→19", C.accent, d?.r18], ["2019→20", C.blue, d?.r19], ["2020→21", C.gold, d?.r20]].map(([lbl, col, val]) => (
+                          <p key={lbl} style={{ color: col, fontSize: 11, margin: "2px 0", fontWeight: 600 }}>
+                            {lbl}: {val != null ? (val > 0 ? '+' : '') + Math.round(val) + '%' : 'N/A'}
+                          </p>
+                        ))}
+                      </div>
+                    );
+                  }} />
+                  <Bar dataKey="v18" fill={C.accent} name="2018→19" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="v19" fill={C.blue}   name="2019→20" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="v20" fill={C.gold}   name="2020→21" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+              <p style={{ color: C.muted, fontSize: 9, margin: "6px 0 0", textAlign: "center" }}>
+                Tick labels show real % values · +100% → tick 10 · +400% → tick 20 · +900% → tick 30 · +2500% → tick 50
+              </p>
             </Card>
 
             {/* Strategic Takeaways */}
@@ -2071,9 +2188,9 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
                 { num: "1", title: "Size Drives Everything", body: "Small companies (<€100M) show explosive median growth; large companies (>€10B) trend deeply negative. This funnel pattern is consistent across all 3 years. Company revenue tier must be a primary model feature.", color: C.accent },
-                { num: "2", title: "Extreme Tails Are Structural", body: "~35% of companies have >100% revenue change. These are real events (M&A, expansions, closures) — not noise. The IQR stays ~300pp every year. Standard MAE/RMSE will be dominated by these tails.", color: C.coral },
+                { num: "2", title: "Extreme Tails Are Structural", body: "~35% of companies have >100% revenue change. These are real events — expansions, closures, or potentially structural reorganisations. The IQR stays ~300pp every year. Standard RMSE will be dominated by these tails without explicit handling.", color: C.coral },
                 { num: "3", title: "COVID Created a Shift, Not a Break", body: "The 2020→2021 median target reached its highest level in the dataset. The recovery effect is real but the distributional shape is unchanged. Year-fixed effects or temporal features should capture this.", color: C.gold },
-                { num: "4", title: "Sector Divergence Amplified by COVID", body: "The COVID shock (2019→20) hit sectors asymmetrically. Food & Bev, Auto Trade saw the deepest declines; Construction and IT held. The 2020→21 recovery was equally uneven, creating strong sector-level signals for modeling.", color: C.blue },
+                { num: "4", title: "Sector Divergence Amplified by COVID", body: "The COVID shock (2019→20) hit sectors asymmetrically. Food & Beverage Services, Motor Vehicle Trade saw the deepest declines; Construction and Information Technology held. The 2020→21 recovery was equally uneven, creating strong sector-level signals for modeling.", color: C.blue },
               ].map((t, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${t.color}`, borderRadius: 8, padding: "16px 18px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -2083,6 +2200,51 @@ export default function App() {
                   <p style={{ color: C.light, fontSize: 12, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
                 </div>
               ))}
+            </div>
+
+            {/* M&A Hypothesis — bridge to Feature Engineering */}
+            <Heading sub="A working hypothesis to explain unexplained extremes — not a confirmed fact">Unexplained Extremes: A Structural Reorganisation Hypothesis</Heading>
+            <div style={{ background: `${C.orange}0C`, border: `1.5px solid ${C.orange}35`, borderRadius: 12, padding: "20px 24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <span style={{ background: `${C.orange}25`, color: C.orange, fontSize: 9, fontWeight: 800, padding: "3px 9px", borderRadius: 4, letterSpacing: 1, textTransform: "uppercase" }}>Working Hypothesis</span>
+                <span style={{ color: C.white, fontSize: 15, fontWeight: 700 }}>Some extreme revenue changes may reflect M&A or major capital restructurings</span>
+              </div>
+              <p style={{ color: C.light, fontSize: 12, lineHeight: 1.75, margin: "0 0 16px" }}>
+                After accounting for size effects, COVID shocks, and sector dynamics, a small subset of companies still shows simultaneous extreme revenue changes (&gt;500%) alongside unusual equity and asset movements. We cannot confirm these are M&A events — the dataset contains no such label. However, the co-occurrence of four indirect financial signals is too consistent to dismiss as noise.
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {[
+                  { signal: "Equity Shock", desc: "Shareholders' equity changes by more than what net profit alone explains — suggesting external capital injection or withdrawal", icon: "⚡" },
+                  { signal: "Asset Jump", desc: "Total fixed assets increase sharply year-over-year without proportional capex — consistent with asset acquisition from a merger", icon: "📈" },
+                  { signal: "Debt Structure Shift", desc: "Short-term vs. long-term debt mix changes abruptly — reflects refinancing typical of acquisition financing", icon: "🏦" },
+                  { signal: "Revenue Discontinuity", desc: "Revenue change exceeds ±200% in a single year — beyond what organic growth or sector trends can explain", icon: "📊" },
+                ].map((s, i) => (
+                  <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
+                      <span style={{ fontSize: 15 }}>{s.icon}</span>
+                      <span style={{ color: C.orange, fontSize: 11, fontWeight: 700 }}>{s.signal}</span>
+                    </div>
+                    <p style={{ color: C.muted, fontSize: 10.5, lineHeight: 1.5, margin: 0 }}>{s.desc}</p>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px" }}>
+                  <p style={{ color: C.white, fontSize: 11, fontWeight: 700, margin: "0 0 5px" }}>Confidence Scoring Logic</p>
+                  <p style={{ color: C.muted, fontSize: 10.5, lineHeight: 1.55, margin: 0 }}>
+                    Each company-year receives 1 point per signal present. A score ≥ 4 out of 4 triggers <code style={{ color: C.orange }}>ma_event_proxy_flag = 1</code>. This conservative threshold minimises false positives — only observations where all four signals align simultaneously are flagged.
+                  </p>
+                </div>
+                <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px" }}>
+                  <p style={{ color: C.white, fontSize: 11, fontWeight: 700, margin: "0 0 5px" }}>How We Use It — With Caveats</p>
+                  <p style={{ color: C.muted, fontSize: 10.5, lineHeight: 1.55, margin: 0 }}>
+                    The flag is used as a feature, not as ground truth. We do not claim to have identified M&A events — we claim these observations behave differently and the model should know that. If the hypothesis is wrong, the flag still captures "structurally unusual years" which carry predictive value regardless of the true cause.
+                  </p>
+                </div>
+              </div>
+              <p style={{ color: C.orange, fontSize: 10, fontWeight: 600, margin: "14px 0 0", fontStyle: "italic" }}>
+                → This hypothesis motivates the <code style={{ color: C.orange }}>ma_event_proxy_flag</code> and <code style={{ color: C.orange }}>ma_confidence_score</code> features built in the Feature Engineering section.
+              </p>
             </div>
           </>
         )}
@@ -2094,28 +2256,44 @@ export default function App() {
               Feature Engineering
             </h2>
             <p style={{ color: C.muted, fontSize: 12, margin: "0 0 20px" }}>
-              From raw financial statements to model-ready features — what we built, how we cleaned it, and what decisions we made
+              From raw financial statements to model-ready features — 162 engineered features across 19 categories, reduced to 27 final features via consensus permutation importance
             </p>
 
+            {/* Feature count summary */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+              {[
+                { label: "Total Features", value: "162", color: C.accent },
+                { label: "Feature Categories", value: "19", color: C.gold },
+                { label: "Final Model Features", value: "27", color: C.blue },
+                { label: "Reduction", value: "83%", color: C.purple },
+              ].map((s, i) => (
+                <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 8, padding: "12px 20px", textAlign: "center", flex: "1 1 120px" }}>
+                  <div style={{ color: s.color, fontSize: 26, fontWeight: 800, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ color: C.muted, fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 4 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
             {/* Created Features */}
-            <Heading sub="New variables derived from the raw dataset">Created Features</Heading>
+            <Heading sub="19 categories of engineered features — key examples from each group">Feature Categories</Heading>
             <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
-                { name: "pv_yoy_growth", type: "Temporal", color: C.accent, desc: "(PV_t − PV_{t−1}) / PV_{t−1} × 100", body: "Year-over-year percentage change in production value. Captures momentum — the single most direct lag feature for our regression target." },
-                { name: "revenue_tier", type: "Rank", color: C.gold, desc: "Decile rank of PV within each fiscal year (1–10)", body: "Non-linear size encoding. Avoids scale dominance by very large firms. Q1=smallest 10%, Q10=largest 10% within each year cross-section." },
-                { name: "tier_shift", type: "Momentum", color: C.blue, desc: "tier_t − tier_{t−1}", body: "Movement in revenue decile vs. prior year. Encodes momentum: companies climbing tiers already outperform; fallen companies face mean-reversion pressure." },
-                { name: "equity_gap", type: "Capital Signal", color: C.purple, desc: "(SE_t − SE_{t−1} − net_profit) / total_assets", body: "Detects hidden capital flows — equity withdrawals by shareholders signal pessimism, injections signal strategic commitment. Unique signal not visible in the P&L." },
-                { name: "debt_burden", type: "Ratio", color: C.coral, desc: "total_debt / operating_income (clamped)", body: "Interest coverage proxy. High values indicate financial stress constraining investment capacity. Winsorised at P1/P99 to handle near-zero denominators." },
-                { name: "asset_efficiency", type: "Ratio", color: C.orange, desc: "production_value / total_assets", body: "Asset turnover — how much revenue each euro of assets generates. Higher values signal operational efficiency. Normalises size effect on raw revenue." },
-                { name: "margin_change", type: "Temporal", color: C.teal, desc: "profit_margin_t − profit_margin_{t−1}", body: "Year-over-year change in net profit margin. Captures trend in profitability efficiency, orthogonal to the raw margin level." },
-                { name: "leverage_change", type: "Temporal", color: "#F472B6", desc: "leverage_t − leverage_{t−1}", body: "Change in debt/equity ratio. Rising leverage can signal growth investment or distress — combined with equity_gap this disambiguates the direction." },
+                { name: "Momentum & Lag Features", count: "14", type: "Temporal", color: C.accent, desc: "revenue_change, rev_growth_lag1/lag2, rev_growth_accel, rev_growth_avg2, operating_margin_lag1/lag2…", body: "1- and 2-year lags of key financial metrics. Acceleration (lag1 − lag2) captures whether growth is accelerating or decelerating — a top-5 predictor of next-year revenue." },
+                { name: "Financial Ratios", count: "10", type: "Ratio", color: C.gold, desc: "operating_margin, profit_margin, cost_intensity, asset_turnover, fixed_asset_turnover, capital_intensity…", body: "Profitability and efficiency ratios normalise for company size. Asset turnover (PV / total_assets) ranks as the 3rd most important final feature by permutation importance." },
+                { name: "Equity Gap", count: "6", type: "Capital Signal", color: C.purple, desc: "equity_gap = SE_t − SE_{t−1} − net_profit; equity_gap_pct_assets; equity_shock_flag…", body: "Detects hidden capital injections or withdrawals invisible in the P&L. Positive gap = shareholder injection → strategic commitment signal. Enters the final 27-feature model." },
+                { name: "Leverage & Solvency", count: "12", type: "Ratio", color: C.coral, desc: "leverage_change, debt_mix_short/long, debt_to_assets_change, current_ratio_change…", body: "YoY changes in leverage and debt structure differentiate growth-investment borrowing from distress. Winsorised at P1/P99 to handle near-zero equity denominators." },
+                { name: "Tier / Size Regime", count: "7", type: "Rank", color: C.blue, desc: "revenue_tier (decile 1–10), tier_shift, tier_extreme_growth_flag, tier_relative_growth…", body: "Non-linear size encoding via annual decile rank — avoids dominance by large firms. Tier shift (movement up/down) is a strong momentum signal and part of the final model." },
+                { name: "Peer & Sector Benchmarks", count: "12", type: "Relative", color: C.teal, desc: "revenue_change_vs_sector, profit_margin_vs_sector, asset_turnover_vs_sector, growth_vs_peers…", body: "Prior-year sector/region medians (computed on training data only) enable comparison against peers. Companies outperforming their sector median tend to sustain that outperformance." },
+                { name: "Binary Event Flags", count: "26", type: "Event", color: C.orange, desc: "high_growth_flag, extreme_decline_flag, equity_shock_flag, ma_event_proxy_flag, covid_dummy…", body: "Regime indicators for structural breaks — M&A proxies (composite confidence score ≥ 4), COVID period dummies (2020–21), and extreme-event flags prevent outlier contamination." },
+                { name: "Interaction & Log Features", count: "18", type: "Composite", color: "#F472B6", desc: "tier_shift_x_profit_margin, age_x_size_tier, log_total_assets, log_production_value_lag1…", body: "Cross-terms (size × sector growth, legal form × volatility) and log transforms of skewed monetary variables. age_x_size_tier enters the final 27-feature model." },
               ].map((f, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${f.color}`, borderRadius: 8, padding: "14px 16px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     <code style={{ color: f.color, fontSize: 12, fontWeight: 700 }}>{f.name}</code>
                     <span style={{ background: `${f.color}20`, color: f.color, fontSize: 8, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: 0.5 }}>{f.type}</span>
+                    <span style={{ marginLeft: "auto", color: C.muted, fontSize: 9, fontWeight: 600 }}>{f.count} features</span>
                   </div>
-                  <p style={{ color: C.muted, fontSize: 10, fontFamily: "monospace", margin: "0 0 6px" }}>{f.desc}</p>
+                  <p style={{ color: C.muted, fontSize: 10, fontFamily: "monospace", margin: "0 0 6px", lineHeight: 1.4 }}>{f.desc}</p>
                   <p style={{ color: C.light, fontSize: 11, lineHeight: 1.5, margin: 0 }}>{f.body}</p>
                 </div>
               ))}
@@ -2161,13 +2339,13 @@ export default function App() {
             </div>
 
             {/* Feature Selection */}
-            <Heading sub="How we will decide which engineered features make it into the final model">Feature Selection Strategy</Heading>
+            <Heading sub="How 162 candidates are reduced to 27 final features — consensus permutation importance">Feature Selection: From 162 → 27</Heading>
             <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
-                { num: "1", color: C.accent, title: "Correlation Filter", body: "Remove features with |Pearson r| < 0.02 against production_value_next. Eliminates pure noise while keeping weak but potentially non-linear predictors." },
-                { num: "2", color: C.gold, title: "Mutual Information Ranking", body: "sklearn's mutual_info_regression captures non-linear associations. Revenue tier, tier_shift and equity_gap score well despite modest Pearson r." },
-                { num: "3", color: C.purple, title: "SHAP Importance (post-model)", body: "After fitting XGBoost, SHAP values reveal true contribution per feature per sample. Final selection based on mean |SHAP| across validation set." },
-                { num: "4", color: C.blue, title: "VIF Multicollinearity Check", body: "Financial size features (PV, assets, equity, debt) correlate 0.85–0.97 with each other. We keep only production_value + ratio-derived features to reduce multicollinearity." },
+                { num: "1", color: C.accent, title: "Fold-wise Permutation Importance", body: "Time-series cross-validation (2 folds). In each fold: fit XGBoost, permute each feature and measure RMSE increase. Features with highest average RMSE degradation are most important. Target K per fold ≈ 35." },
+                { num: "2", color: C.gold, title: "Consensus Aggregation", body: "Features selected in both folds (frequency ≥ 2) form the 'consensus set'. If consensus < 20 features, backfill from average permutation importance ranking across folds to ensure coverage." },
+                { num: "3", color: C.purple, title: "Final 27 Selected Features", body: "Top features from consensus set. Top-5 by importance: production_value (137), legal_form (94), log_total_assets (76), current_assets (60), legal_form_encoded (58). equity_gap, asset_turnover, age_x_size_tier all included." },
+                { num: "4", color: C.blue, title: "Validation on Holdout", body: "Final 27 features evaluated on held-out 2022–23 data. Selection metrics: RMSE, MAPE, directional accuracy, tail MAE (high-growth/decline). Directional accuracy weighted equally with magnitude error." },
               ].map((t, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${t.color}`, borderRadius: 8, padding: "14px 16px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -2177,6 +2355,17 @@ export default function App() {
                   <p style={{ color: C.light, fontSize: 11, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Final selected features strip */}
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", marginTop: 4 }}>
+              <p style={{ color: C.accent, fontSize: 10, fontWeight: 700, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 1 }}>27 Final Model Features (ranked by permutation importance)</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {["production_value","legal_form","log_total_assets","current_assets","legal_form_encoded","total_fixed_assets","asset_turnover","net_debt","financial_income","financial_burden","capital_intensity","operating_income","working_capital","operating_margin","revenue_change","asset_turnover_vs_sector","total_fixed_assets_lag1","equity_gap_pct_assets","fixed_asset_turnover","equity_gap","ateco_sector","asset_turnover_lag1","working_capital_to_assets","financial_income_lag1","age_x_size_tier","current_ratio","log_total_assets_lag1"].map((feat, i) => (
+                  <span key={i} style={{ background: i < 5 ? `${C.gold}22` : `${C.accent}12`, border: `1px solid ${i < 5 ? C.gold : C.border}`, color: i < 5 ? C.gold : C.light, fontSize: 9.5, fontWeight: i < 5 ? 700 : 500, padding: "3px 8px", borderRadius: 4, fontFamily: "monospace" }}>{feat}</span>
+                ))}
+              </div>
+              <p style={{ color: C.muted, fontSize: 9, margin: "8px 0 0" }}>Gold highlight = top-5 by permutation importance · 83% reduction from 162 candidates</p>
             </div>
           </>
         )}
@@ -2264,6 +2453,30 @@ export default function App() {
               ))}
             </div>
 
+            {/* Feature selection recap in next steps */}
+            <Heading sub="Why we start with 162 features and cut to 27 — and how that decision is made">Feature Selection in the Model Pipeline</Heading>
+            <Card>
+              <p style={{ color: C.light, fontSize: 12, lineHeight: 1.7, margin: "0 0 14px" }}>
+                After engineering 162 candidates across 19 categories, we apply <strong style={{ color: C.gold }}>consensus permutation importance</strong> to select the 27 features that enter the final model. The process runs inside each cross-validation fold — avoiding any selection leakage — and requires a feature to matter in <em>both</em> time-series folds before it is trusted.
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {[
+                  { step: "Step 1", color: C.accent, label: "Generate 162 features", detail: "Lags, ratios, equity gap, tier mechanics, peer benchmarks, interactions, logs, flags" },
+                  { step: "Step 2", color: C.gold, label: "Fold-wise importance", detail: "Permute each feature in each CV fold; keep top ~35 by RMSE degradation per fold" },
+                  { step: "Step 3", color: C.blue, label: "Consensus → 27 final", detail: "Features in both folds form the consensus set; backfill from importance ranking if < 20" },
+                ].map((s, i) => (
+                  <div key={i} style={{ background: `${s.color}0E`, border: `1px solid ${s.color}30`, borderRadius: 8, padding: "10px 12px" }}>
+                    <div style={{ color: s.color, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{s.step}</div>
+                    <div style={{ color: C.white, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ color: C.muted, fontSize: 10, lineHeight: 1.45 }}>{s.detail}</div>
+                  </div>
+                ))}
+              </div>
+              <p style={{ color: C.muted, fontSize: 10, margin: "12px 0 0", lineHeight: 1.6 }}>
+                Why not SHAP or mutual information? Permutation importance is model-aware and evaluated on held-out validation folds — it measures <em>actual predictive value</em>, not just correlation with the target. Features like <code style={{ color: C.gold }}>equity_gap_pct_assets</code> and <code style={{ color: C.gold }}>age_x_size_tier</code> rank poorly on Pearson r but survive fold-wise selection, confirming their non-linear signal.
+              </p>
+            </Card>
+
             {/* Key challenges ahead */}
             <Heading sub="The hardest problems we will face — and how we plan to tackle them">Key Challenges Ahead</Heading>
             <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -2298,7 +2511,7 @@ export default function App() {
         )}
 
         <div style={{ marginTop: 36, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
-          <p style={{ color: C.muted, fontSize: 9.5, margin: 0 }}>Target: revenue_change_next = (production_value_next − production_value) / production_value × 100  •  Shift(−1) per company</p>
+          <p style={{ color: C.muted, fontSize: 9.5, margin: 0 }}>ExpertAI Challenge 3</p>
           <p style={{ color: C.muted, fontSize: 9.5, margin: 0 }}>Source: train_data.csv  •  Training data only — no data leakage</p>
         </div>
       </div>

@@ -95,19 +95,19 @@ select {
   table-layout: fixed;
 }
 .corr-header {
-  padding: 2px;
-  height: 72px;
+  padding: 2px 0;
+  height: 90px;
   vertical-align: bottom;
-  text-align: left;
+  text-align: center;
   white-space: nowrap;
-  width: 38px;
-  min-width: 38px;
+  width: 42px;
+  min-width: 42px;
 }
 .corr-header-inner {
-  transform: rotate(-45deg);
-  transform-origin: left bottom;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
   display: inline-block;
-  font-size: 8px;
+  font-size: 10px;
   color: #B8C7DC;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -115,11 +115,11 @@ select {
   padding-bottom: 4px;
 }
 .corr-cell {
-  width: 38px;
-  min-width: 38px;
+  width: 42px;
+  min-width: 42px;
   height: 32px;
   text-align: center;
-  font-size: 7.5px;
+  font-size: 9px;
   font-weight: 600;
   color: rgba(255,255,255,0.88);
   border: 1px solid rgba(27,42,69,0.6);
