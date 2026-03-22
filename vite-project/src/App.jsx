@@ -118,20 +118,35 @@ function computeRegionMapData(rows) {
   for (const [region, rr] of Object.entries(byRegion)) {
     const uniqueCo   = new Set(rr.map(r => r.company_id)).size;
     const growthVals = rr.map(r => r.revenue_change).filter(v => v !== null && isFinite(v));
+    const pvVals     = rr.map(r => r.production_value).filter(v => v > 0 && isFinite(v));
     const yrsVals    = rr.map(r => r.years_in_business).filter(v => v > 0 && isFinite(v));
     const sectorCnt  = {};
     for (const r of rr) if (r.ateco_sector) sectorCnt[r.ateco_sector] = (sectorCnt[r.ateco_sector] || 0) + 1;
     const topCode    = Object.entries(sectorCnt).sort((a, b) => b[1] - a[1])[0]?.[0];
     result[region] = {
-      companies:     uniqueCo,
-      median_growth: round2(medianOf(growthVals)),
-      gt100_count:   growthVals.filter(v => v > 100).length,
-      neg50_count:   growthVals.filter(v => v < -50).length,
-      avg_years:     yrsVals.length ? round2(yrsVals.reduce((a, b) => a + b, 0) / yrsVals.length) : 0,
-      top_sector:    topCode ? `ATECO ${String(topCode).padStart(2, "0")}` : "N/A",
-      total_revenue: rr.reduce((s, r) => s + r.production_value, 0),
+      companies:      uniqueCo,
+      median_growth:  round2(medianOf(growthVals)),
+      median_revenue: medianOf(pvVals),
+      total_obs:      growthVals.length,
+      gt100_count:    growthVals.filter(v => v > 100).length,
+      neg50_count:    growthVals.filter(v => v < -50).length,
+      avg_years:      yrsVals.length ? round2(yrsVals.reduce((a, b) => a + b, 0) / yrsVals.length) : 0,
+      top_sector:     topCode ? `ATECO ${String(topCode).padStart(2, "0")}` : "N/A",
+      total_revenue:  rr.reduce((s, r) => s + r.production_value, 0),
     };
   }
+  // Assign ranks by company count (1 = most companies)
+  Object.entries(result)
+    .sort((a, b) => b[1].companies - a[1].companies)
+    .forEach(([region], i) => { result[region].rank = i + 1; });
+  // National benchmarks across all filtered rows
+  const allGrowth = filtered.map(r => r.revenue_change).filter(v => v !== null && isFinite(v));
+  const allPV     = filtered.map(r => r.production_value).filter(v => v > 0 && isFinite(v));
+  result._national = {
+    medianGrowth:  round2(medianOf(allGrowth)),
+    medianRevenue: medianOf(allPV),
+    numRegions:    Object.keys(result).length,
+  };
   return result;
 }
 
@@ -658,9 +673,9 @@ const Tip = ({ active, payload, label, sfx = "" }) => {
   if (!active || !payload?.length) return null;
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 13px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }}>
-      <p style={{ color: C.light, fontSize: 10, margin: "0 0 5px", textTransform: "uppercase", letterSpacing: 1 }}>{label}</p>
+      <p style={{ color: C.light, fontSize: 12, margin: "0 0 5px", textTransform: "uppercase", letterSpacing: 1 }}>{label}</p>
       {payload.map((p, i) => (
-        <p key={i} style={{ color: p.color || C.accent, fontSize: 12, margin: "2px 0", fontWeight: 600 }}>
+        <p key={i} style={{ color: p.color || C.accent, fontSize: 14, margin: "2px 0", fontWeight: 600 }}>
           {p.name}: {typeof p.value === "number" ? p.value.toLocaleString() : p.value}{sfx}
         </p>
       ))}
@@ -670,7 +685,7 @@ const Tip = ({ active, payload, label, sfx = "" }) => {
 
 const KPI = ({ label, value, sub, color = C.accent }) => (
   <div style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `3px solid ${color}`, borderRadius: 8, padding: "14px 16px", flex: 1, minWidth: 135 }}>
-    <p style={{ color: C.muted, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", margin: 0 }}>{label}</p>
+    <p style={{ color: C.muted, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", margin: 0 }}>{label}</p>
     <p style={{ color: C.white, fontSize: 26, fontWeight: 700, margin: "5px 0 2px", fontFamily: "'Playfair Display', Georgia, serif" }}>{value}</p>
     {sub && <p style={{ color: C.muted, fontSize: 10.5, margin: 0 }}>{sub}</p>}
   </div>
@@ -679,11 +694,11 @@ const KPI = ({ label, value, sub, color = C.accent }) => (
 const Heading = ({ children, sub, insight }) => (
   <div style={{ margin: "28px 0 14px" }}>
     <h3 style={{ color: C.white, fontSize: 17, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>{children}</h3>
-    {sub && <p style={{ color: C.muted, fontSize: 11, margin: "3px 0 0" }}>{sub}</p>}
+    {sub && <p style={{ color: C.muted, fontSize: 13, margin: "3px 0 0" }}>{sub}</p>}
     {insight && (
       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, background: `${C.accent}12`, border: `1px solid ${C.accent}30`, borderRadius: 6, padding: "5px 10px" }}>
-        <span style={{ color: C.accent, fontSize: 11 }}>→</span>
-        <span style={{ color: C.accent, fontSize: 11, fontWeight: 500 }}>{insight}</span>
+        <span style={{ color: C.accent, fontSize: 13 }}>→</span>
+        <span style={{ color: C.accent, fontSize: 13, fontWeight: 500 }}>{insight}</span>
       </div>
     )}
   </div>
@@ -694,7 +709,7 @@ const Tab = ({ active, children, onClick, color }) => (
     background: active ? (color || C.accent) : "transparent",
     color: active ? C.bg : C.muted,
     border: active ? "none" : `1px solid ${C.border}`,
-    borderRadius: 6, padding: "8px 20px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+    borderRadius: 6, padding: "8px 20px", fontSize: 14, fontWeight: 700, cursor: "pointer",
     fontFamily: "'DM Sans', sans-serif", letterSpacing: 0.3, transition: "all 0.15s",
   }}>{children}</button>
 );
@@ -714,7 +729,7 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
         <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>
           Fiscal Year {yr}
         </h2>
-        <span style={{ color: C.accent, fontSize: 14, fontWeight: 600 }}>Predicting {d.predicting}</span>
+        <span style={{ color: C.accent, fontSize: 16, fontWeight: 600 }}>Predicting {d.predicting}</span>
       </div>
 
       {/* KPIs */}
@@ -734,8 +749,8 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `2px solid ${C.border}` }}>
-                  <th style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: "left", padding: "7px 8px" }}>Percentile</th>
-                  <th style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "7px 8px" }}>Revenue Change Next</th>
+                  <th style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: "left", padding: "7px 8px" }}>Percentile</th>
+                  <th style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "7px 8px" }}>Revenue Change Next</th>
                 </tr>
               </thead>
               <tbody>
@@ -744,18 +759,18 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
                   const clr = q.val > 0 ? C.accent : q.val < -50 ? C.coral : C.gold;
                   return (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: isMedian ? `${C.accent}10` : "transparent" }}>
-                      <td style={{ padding: "7px 8px", color: isMedian ? C.accent : C.light, fontSize: 12, fontWeight: isMedian ? 700 : 400 }}>
+                      <td style={{ padding: "7px 8px", color: isMedian ? C.accent : C.light, fontSize: 14, fontWeight: isMedian ? 700 : 400 }}>
                         {q.q}{isMedian ? " (Median)" : ""}
                       </td>
-                      <td style={{ padding: "7px 8px", textAlign: "right", color: clr, fontSize: 13, fontWeight: 600 }}>
+                      <td style={{ padding: "7px 8px", textAlign: "right", color: clr, fontSize: 15, fontWeight: 600 }}>
                         {q.val > 0 ? "+" : ""}{q.val.toLocaleString()}%
                       </td>
                     </tr>
                   );
                 })}
                 <tr style={{ borderTop: `2px solid ${C.border}` }}>
-                  <td style={{ padding: "7px 8px", color: C.muted, fontSize: 11 }}>IQR (Q75–Q25)</td>
-                  <td style={{ padding: "7px 8px", textAlign: "right", color: C.orange, fontSize: 13, fontWeight: 600 }}>{d.target.iqr.toFixed(1)}pp</td>
+                  <td style={{ padding: "7px 8px", color: C.muted, fontSize: 13 }}>IQR (Q75–Q25)</td>
+                  <td style={{ padding: "7px 8px", textAlign: "right", color: C.orange, fontSize: 15, fontWeight: 600 }}>{d.target.iqr.toFixed(1)}pp</td>
                 </tr>
               </tbody>
             </table>
@@ -768,8 +783,8 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
             <ResponsiveContainer width="100%" height={245}>
               <BarChart data={d.distBuckets} barCategoryGap="10%">
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                <XAxis dataKey="range" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} interval={0} angle={-30} textAnchor="end" height={52} />
-                <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} domain={sharedDomains?.distAxis.domain} ticks={sharedDomains?.distAxis.ticks} />
+                <XAxis dataKey="range" tick={{ fill: C.muted, fontSize: 12 }} axisLine={{ stroke: C.border }} interval={0} angle={-30} textAnchor="end" height={52} />
+                <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} domain={sharedDomains?.distAxis.domain} ticks={sharedDomains?.distAxis.ticks} />
                 <Tooltip content={<Tip />} />
                 <Bar dataKey="count" name="Companies" radius={[3, 3, 0, 0]}>
                   {d.distBuckets.map((b, i) => <Cell key={i} fill={b.c} />)}
@@ -791,15 +806,15 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
 
         {/* Quantile table */}
         <Card>
-          <p style={{ color: C.muted, fontSize: 10, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 10px", fontWeight: 600 }}>
+          <p style={{ color: C.muted, fontSize: 12, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 10px", fontWeight: 600 }}>
             Production Value Quantiles
           </p>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `2px solid ${C.border}` }}>
-                <th style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: "left", padding: "6px 8px" }}>Percentile</th>
-                <th style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "6px 8px" }}>Production Value</th>
-                <th style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "6px 8px" }}>Size Tier</th>
+                <th style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: "left", padding: "6px 8px" }}>Percentile</th>
+                <th style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "6px 8px" }}>Production Value</th>
+                <th style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "6px 8px" }}>Size Tier</th>
               </tr>
             </thead>
             <tbody>
@@ -810,14 +825,14 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
                 const color    = TIER_COLORS[Math.max(0, tierIdx)];
                 return (
                   <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: isMedian ? `${C.gold}10` : "transparent" }}>
-                    <td style={{ padding: "7px 8px", color: isMedian ? C.gold : C.light, fontSize: 12, fontWeight: isMedian ? 700 : 400 }}>
+                    <td style={{ padding: "7px 8px", color: isMedian ? C.gold : C.light, fontSize: 14, fontWeight: isMedian ? 700 : 400 }}>
                       {pq.q}{isMedian ? " (Median)" : ""}
                     </td>
-                    <td style={{ padding: "7px 8px", textAlign: "right", color, fontSize: 13, fontWeight: 600 }}>
+                    <td style={{ padding: "7px 8px", textAlign: "right", color, fontSize: 15, fontWeight: 600 }}>
                       {fmtM(pq.val * 1e6)}
                     </td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>
-                      <span style={{ background: `${color}20`, border: `1px solid ${color}50`, color, borderRadius: 4, padding: "2px 7px", fontSize: 9, fontWeight: 700 }}>
+                      <span style={{ background: `${color}20`, border: `1px solid ${color}50`, color, borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 700 }}>
                         {tier.name}
                       </span>
                     </td>
@@ -825,8 +840,8 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
                 );
               })}
               <tr style={{ borderTop: `2px solid ${C.border}` }}>
-                <td style={{ padding: "7px 8px", color: C.muted, fontSize: 11 }}>Mean (right-skewed)</td>
-                <td colSpan={2} style={{ padding: "7px 8px", textAlign: "right", color: C.orange, fontSize: 13, fontWeight: 600 }}>
+                <td style={{ padding: "7px 8px", color: C.muted, fontSize: 13 }}>Mean (right-skewed)</td>
+                <td colSpan={2} style={{ padding: "7px 8px", textAlign: "right", color: C.orange, fontSize: 15, fontWeight: 600 }}>
                   €{d.prodMean.toLocaleString()}M
                 </td>
               </tr>
@@ -836,17 +851,17 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
 
         {/* Size count distribution bar chart — filter tiers with too few companies */}
         <Card>
-          <p style={{ color: C.muted, fontSize: 10, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 10px", fontWeight: 600 }}>
+          <p style={{ color: C.muted, fontSize: 12, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 10px", fontWeight: 600 }}>
             Company Count by Revenue Tier
           </p>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={d.sizeDist.filter(t => t.count > 0)} barCategoryGap="12%" margin={{ left: 4, right: 4, top: 18, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={62} interval={0} />
-              <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} width={46} domain={sharedDomains?.sizeDistAxis.domain} ticks={sharedDomains?.sizeDistAxis.ticks} />
+              <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={62} interval={0} />
+              <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} width={46} domain={sharedDomains?.sizeDistAxis.domain} ticks={sharedDomains?.sizeDistAxis.ticks} />
               <Tooltip content={<Tip />} />
               <Bar dataKey="count" name="Observations" radius={[4, 4, 0, 0]}>
-                <LabelList dataKey="count" position="top" style={{ fill: C.light, fontSize: 9, fontWeight: 600 }} />
+                <LabelList dataKey="count" position="top" style={{ fill: C.light, fontSize: 11, fontWeight: 600 }} />
                 {d.sizeDist.filter(t => t.count > 0).map((t) => {
                   const origIdx = d.sizeDist.indexOf(t);
                   return <Cell key={origIdx} fill={TIER_COLORS[origIdx % TIER_COLORS.length]} />;
@@ -854,7 +869,7 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          <p style={{ color: C.muted, fontSize: 9, textAlign: "center", margin: "4px 0 0" }}>All revenue tiers shown  •  €0–25M includes all companies below €25M production value</p>
+          <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "4px 0 0" }}>All revenue tiers shown  •  €0–25M includes all companies below €25M production value</p>
         </Card>
       </div>
 
@@ -864,8 +879,8 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={d.sizeSeg} barCategoryGap="12%" margin={{ top: 24, left: 0, right: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-            <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={60} interval={0} />
-            <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} width={52} domain={sharedDomains?.segAxis.domain} ticks={sharedDomains?.segAxis.ticks} tickFormatter={v => `${v}%`} label={{ value: "Median Target %", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 10, dx: -10 }} />
+            <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={60} interval={0} />
+            <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} width={52} domain={sharedDomains?.segAxis.domain} ticks={sharedDomains?.segAxis.ticks} tickFormatter={v => `${v}%`} label={{ value: "Median Target %", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 12, dx: -10 }} />
             <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
             <Tooltip content={<Tip sfx="%" />} />
             <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
@@ -887,7 +902,7 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
         </ResponsiveContainer>
         <div style={{ display: "flex", justifyContent: "center", gap: 14, marginTop: 6, flexWrap: "wrap" }}>
           {d.sizeSeg.map((s, i) => (
-            <span key={i} style={{ fontSize: 9.5, color: C.muted }}>{s.name}: <b style={{ color: C.light }}>{s.n}</b> obs.</span>
+            <span key={i} style={{ fontSize: 11, color: C.muted }}>{s.name}: <b style={{ color: C.light }}>{s.n}</b> obs.</span>
           ))}
         </div>
       </Card>
@@ -914,7 +929,7 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: i < d.sectors.length - 1 ? `1px solid ${C.border}` : "none" }}>
                     {/* Sector name + n label */}
                     <div style={{ width: 118, flexShrink: 0, textAlign: "right" }}>
-                      <span style={{ color: C.light, fontSize: 10 }}>{s.name}</span>
+                      <span style={{ color: C.light, fontSize: 12 }}>{s.name}</span>
                       <span style={{ color: C.muted, fontSize: 8.5, marginLeft: 4 }}>n={s.n}</span>
                     </div>
                     {/* Lollipop track */}
@@ -944,13 +959,13 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
                     </div>
                     {/* Value label */}
                     <div style={{ width: 44, flexShrink: 0, textAlign: "left" }}>
-                      <span style={{ color: dotColor, fontSize: 10, fontWeight: 700 }}>{s.medTarget > 0 ? "+" : ""}{s.medTarget}%</span>
+                      <span style={{ color: dotColor, fontSize: 12, fontWeight: 700 }}>{s.medTarget > 0 ? "+" : ""}{s.medTarget}%</span>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <p style={{ color: C.muted, fontSize: 9.5, textAlign: "center", margin: "8px 0 0" }}>
+            <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "8px 0 0" }}>
               Sorted by median target  •  n = observations  •  Dot color intensity scales with magnitude
             </p>
           </Card>
@@ -962,12 +977,12 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
             <ResponsiveContainer width="100%" height={310}>
               <BarChart data={d.regions} layout="vertical" barCategoryGap="14%">
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                <XAxis type="number" tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} domain={sharedDomains?.regX} />
-                <YAxis dataKey="name" type="category" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} width={110} />
+                <XAxis type="number" tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} domain={sharedDomains?.regX} />
+                <YAxis dataKey="name" type="category" tick={{ fill: C.light, fontSize: 14 }} axisLine={{ stroke: C.border }} width={110} />
                 <ReferenceLine x={0} stroke={C.muted} strokeWidth={2} />
                 <Tooltip content={<Tip sfx="%" />} />
                 <Bar dataKey="medTarget" name="Median Target %" radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="medTarget" position="right" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 10, fontWeight: 600 }} />
+                  <LabelList dataKey="medTarget" position="right" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 12, fontWeight: 600 }} />
                   {d.regions.map((r, i) => <Cell key={i} fill={r.medTarget > 0 ? C.blue : C.coral} />)}
                 </Bar>
               </BarChart>
@@ -983,17 +998,17 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
           <thead>
             <tr style={{ borderBottom: `2px solid ${C.border}` }}>
               {["Legal Form", "Companies", "Median Revenue", "Median Target"].map((h, i) => (
-                <th key={i} style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: i === 0 ? "left" : "right", padding: "8px 10px" }}>{h}</th>
+                <th key={i} style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: i === 0 ? "left" : "right", padding: "8px 10px" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {d.legal.map((l, i) => (
               <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                <td style={{ padding: "8px 10px", fontWeight: 600, color: C.white, fontSize: 13 }}>{l.name}</td>
-                <td style={{ padding: "8px 10px", textAlign: "right", color: C.light, fontSize: 12 }}>{l.n.toLocaleString()}</td>
-                <td style={{ padding: "8px 10px", textAlign: "right", color: C.gold, fontSize: 12 }}>€{l.medRev.toLocaleString()}M</td>
-                <td style={{ padding: "8px 10px", textAlign: "right", color: l.medTarget > 0 ? C.accent : C.coral, fontSize: 13, fontWeight: 700 }}>
+                <td style={{ padding: "8px 10px", fontWeight: 600, color: C.white, fontSize: 15 }}>{l.name}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", color: C.light, fontSize: 14 }}>{l.n.toLocaleString()}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", color: C.gold, fontSize: 14 }}>€{l.medRev.toLocaleString()}M</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", color: l.medTarget > 0 ? C.accent : C.coral, fontSize: 15, fontWeight: 700 }}>
                   {l.medTarget > 0 ? "+" : ""}{l.medTarget}%
                 </td>
               </tr>
@@ -1003,26 +1018,43 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
       </Card>
 
       {/* ── SECTION 6: Year-Specific Correlation Matrices ── */}
-      {yearsCorrelation && (
-        <>
-          <Heading
-            sub={`Pearson correlation for ${yr} observations — split by feature type. ★ = prediction targets`}
-            insight="Financial size features correlate strongly with PVN★ but near-zero with RCN★ — consistent every year"
-          >
-            {yr} Feature Correlations
-          </Heading>
-          <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <Card>
-              <SplitCorrMatrix corrData={yearsCorrelation.financial} title="Financial Size Features" accentColor={C.gold} />
-              <p style={{ color: C.muted, fontSize: 9, marginTop: 8, marginBottom: 0 }}>★ = target columns  •  Hover for exact values  •  n = {yearsCorrelation.financial.n ?? "—"}</p>
-            </Card>
-            <Card>
-              <SplitCorrMatrix corrData={yearsCorrelation.ratios} title="Financial Ratios" accentColor={C.blue} />
-              <p style={{ color: C.muted, fontSize: 9, marginTop: 8, marginBottom: 0 }}>★ = target columns  •  Hover for exact values  •  n = {yearsCorrelation.ratios.n ?? "—"}</p>
-            </Card>
-          </div>
-        </>
-      )}
+      {yearsCorrelation && (() => {
+        const yPVIdx = yearsCorrelation.financial.labels?.indexOf("PVN★") ?? -1;
+        const yRCIdx = yearsCorrelation.financial.labels?.indexOf("RCN★") ?? -1;
+        const yNFeats = Math.max(0, (yearsCorrelation.financial.labels?.length ?? 2) - 2);
+        const yPVCorrs = yPVIdx >= 0 ? yearsCorrelation.financial.matrix?.slice(0, yNFeats).map(row => Math.abs(row[yPVIdx] ?? 0)) ?? [] : [];
+        const yRCCorrs = yRCIdx >= 0 ? yearsCorrelation.financial.matrix?.slice(0, yNFeats).map(row => Math.abs(row[yRCIdx] ?? 0)) ?? [] : [];
+        const yPVMax = yPVCorrs.length ? Math.max(...yPVCorrs).toFixed(2) : "—";
+        const yRCMax = yRCCorrs.length ? Math.max(...yRCCorrs).toFixed(2) : "—";
+        const covidNote = yr === 2019
+          ? "Note: 2019→20 is the COVID transition year — correlations are somewhat weaker as the pandemic disrupted normal financial relationships"
+          : null;
+        return (
+          <>
+            <Heading
+              sub={`Pearson correlation for ${yr} observations — split by feature type. ★ = prediction targets`}
+              insight={`Financial size features: up to ${yPVMax} with PVN★, up to ${yRCMax} with RCN★ — size features are far more informative for the absolute target`}
+            >
+              {yr} Feature Correlations
+            </Heading>
+            {covidNote && (
+              <div style={{ background: `${C.gold}10`, border: `1px solid ${C.gold}25`, borderRadius: 8, padding: "8px 14px", marginBottom: 10 }}>
+                <p style={{ color: C.gold, fontSize: 13, margin: 0, lineHeight: 1.5 }}>⚠ {covidNote}</p>
+              </div>
+            )}
+            <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <Card>
+                <SplitCorrMatrix corrData={yearsCorrelation.financial} title="Financial Size Features" accentColor={C.gold} />
+                <p style={{ color: C.muted, fontSize: 12, marginTop: 8, marginBottom: 0 }}>★ = target columns  •  Hover for exact values  •  n = {yearsCorrelation.financial.n ?? "—"}</p>
+              </Card>
+              <Card>
+                <SplitCorrMatrix corrData={yearsCorrelation.ratios} title="Financial Ratios" accentColor={C.blue} />
+                <p style={{ color: C.muted, fontSize: 12, marginTop: 8, marginBottom: 0 }}>★ = target columns  •  Hover for exact values  •  n = {yearsCorrelation.ratios.n ?? "—"}</p>
+              </Card>
+            </div>
+          </>
+        );
+      })()}
     </>
   );
 }
@@ -1079,9 +1111,10 @@ function ItalyMapTab({ regionMapData }) {
   const ttRef    = useRef(null);
   const frameRef = useRef(null);
 
-  const totalCo   = Object.values(regionMapData).reduce((s, r) => s + r.companies, 0);
-  const totalProd = Object.values(regionMapData).reduce((s, r) => s + r.total_revenue, 0);
-  const numReg    = Object.keys(regionMapData).filter(k => regionMapData[k].companies > 0).length;
+  const national  = regionMapData._national || { medianGrowth: 0, medianRevenue: 0, numRegions: 20 };
+  const totalCo   = Object.values(regionMapData).reduce((s, r) => s + (r.companies || 0), 0);
+  const totalProd = Object.values(regionMapData).reduce((s, r) => s + (r.total_revenue || 0), 0);
+  const numReg    = Object.keys(regionMapData).filter(k => k !== '_national' && regionMapData[k].companies > 0).length;
 
   useEffect(() => {
     // Wait for D3 to be available (loaded via CDN with defer)
@@ -1110,15 +1143,61 @@ function ItalyMapTab({ regionMapData }) {
       const m    = d.properties.metrics;
       const sec  = describeAteco(m.top_sector);
       const share = totalCompanies > 0 ? (m.companies / totalCompanies * 100).toFixed(1) : "0.0";
-      const perCo = m.companies > 0 ? fmtEuro(m.total_revenue / m.companies) : "—";
+      const rank  = m.rank || "—";
+      const numR  = national.numRegions || 20;
+
+      // Zero-company guard — show N/A for everything
+      if (m.companies === 0) {
+        return `
+          <div class="map-tt-head">
+            <div>
+              <h3 class="map-tt-h3">${d.properties.display_name}</h3>
+              <div class="map-tt-note">Fiscal years 2018–2020 · revenue_change observations</div>
+            </div>
+            <div class="map-tt-tag">0 companies</div>
+          </div>
+          <div class="map-stats">
+            ${["Median Growth","Median Revenue","Revenue >+100%","Revenue <−50%","Dataset Share","Avg Yrs in Biz"].map(k =>
+              `<div class="map-stat"><div class="map-stat-k">${k}</div><div class="map-stat-v" style="color:#94a3b8">N/A</div></div>`
+            ).join("")}
+            <div class="map-stat map-stat-wide"><div class="map-stat-k">Top Sector</div><div class="map-stat-v" style="color:#94a3b8">N/A</div></div>
+          </div>
+          <div class="map-insight"><strong>Quick read:</strong> No data for this region in the 2018–2020 training window.</div>`;
+      }
+
+      // Growth vs national benchmark
+      const growthVal   = Number(m.median_growth);
+      const natGrowth   = Number(national.medianGrowth);
+      const growthDelta = round2(growthVal - natGrowth);
+      const growthColor = growthVal >= 0 ? "#16a34a" : "#dc2626";
+      const deltaColor  = growthDelta >= 0 ? "#16a34a" : "#dc2626";
+      const growthStr   = `${growthVal >= 0 ? "+" : ""}${growthVal.toFixed(1)}%`;
+      const deltaStr    = `${growthDelta >= 0 ? "+" : ""}${growthDelta.toFixed(1)}pp vs national`;
+
+      // Median revenue vs national
+      const medRev    = m.median_revenue || 0;
+      const natMedRev = national.medianRevenue || 1;
+      const revRatio  = medRev / natMedRev;
+      const medRevStr = fmtEuro(medRev);
+      const natRevStr = fmtEuro(natMedRev);
+
+      // Rich quick-read insight
       const insight = (() => {
-        if (m.companies === 0) return "No companies in this region after filtering.";
-        const density = m.companies >= 300 ? "High representation" : m.companies >= 150 ? "Strong representation" : m.companies >= 75 ? "Moderate representation" : "Light representation";
-        const sLine   = sec.label === "N/A" ? "" : ` Lead sector: ${sec.label}.`;
-        const bal     = m.gt100_count - m.neg50_count >= 25 ? " Upside extremes dominate." : m.neg50_count - m.gt100_count >= 25 ? " Downside stress dominates." : " Upside/downside balanced.";
-        return density + "." + sLine + bal;
+        const parts = [];
+        if (rank <= 2) parts.push(`Anchor region (#${rank} by dataset size) — the model will be disproportionately trained on its patterns`);
+        else if (rank <= 5) parts.push(`Major region (#${rank} of ${numR} by dataset size)`);
+        if (revRatio > 2) parts.push(`large-company region (median revenue ${revRatio.toFixed(1)}× the national median)`);
+        else if (revRatio < 0.5) parts.push(`SME-dominated region (median revenue ${revRatio.toFixed(2)}× the national median)`);
+        if (growthDelta > 5) parts.push(`outperforms the national median by +${growthDelta.toFixed(1)}pp`);
+        else if (growthDelta < -5) parts.push(`underperforms the national median by ${growthDelta.toFixed(1)}pp`);
+        const gt100pct = m.total_obs > 0 ? (m.gt100_count / m.total_obs * 100).toFixed(1) : "0.0";
+        const neg50pct = m.total_obs > 0 ? (m.neg50_count / m.total_obs * 100).toFixed(1) : "0.0";
+        if (m.neg50_count > m.gt100_count + 25) parts.push(`downside stress dominates (${neg50pct}% below −50% vs ${gt100pct}% above +100%) — lead sector: ${sec.label}`);
+        else if (m.gt100_count > m.neg50_count + 25) parts.push(`growth extremes dominate (${gt100pct}% of observations above +100%) — lead sector: ${sec.label}`);
+        else if (parts.length === 0) parts.push(`balanced upside/downside distribution — lead sector: ${sec.label}`);
+        return parts.slice(0, 3).join("; ") + ".";
       })();
-      const growthColor = m.median_growth >= 0 ? "#16a34a" : "#dc2626";
+
       return `
         <div class="map-tt-head">
           <div>
@@ -1130,35 +1209,31 @@ function ItalyMapTab({ regionMapData }) {
         <div class="map-stats">
           <div class="map-stat">
             <div class="map-stat-k">Median Growth</div>
-            <div class="map-stat-v" style="color:${growthColor}">${m.median_growth >= 0 ? "+" : ""}${Number(m.median_growth).toFixed(1)}%</div>
+            <div class="map-stat-v" style="color:${growthColor}">${growthStr} <span style="font-size:10px;color:${deltaColor};font-weight:600">(${deltaStr})</span></div>
           </div>
           <div class="map-stat">
-            <div class="map-stat-k">&gt;100% Obs.</div>
-            <div class="map-stat-v">${m.gt100_count.toLocaleString()}</div>
+            <div class="map-stat-k">Median Revenue</div>
+            <div class="map-stat-v">${medRevStr} <span style="font-size:10px;color:#667085;font-weight:500">(nat: ${natRevStr})</span></div>
           </div>
           <div class="map-stat">
-            <div class="map-stat-k">&lt;−50% Obs.</div>
-            <div class="map-stat-v">${m.neg50_count.toLocaleString()}</div>
+            <div class="map-stat-k">Revenue &gt;+100%</div>
+            <div class="map-stat-v" style="color:#16a34a">${m.total_obs > 0 ? (m.gt100_count / m.total_obs * 100).toFixed(1) : "0.0"}%</div>
+          </div>
+          <div class="map-stat">
+            <div class="map-stat-k">Revenue &lt;−50%</div>
+            <div class="map-stat-v" style="color:#dc2626">${m.total_obs > 0 ? (m.neg50_count / m.total_obs * 100).toFixed(1) : "0.0"}%</div>
+          </div>
+          <div class="map-stat">
+            <div class="map-stat-k">Dataset Share</div>
+            <div class="map-stat-v">${share}% <span class="map-sector-badge">#${rank} of ${numR}</span></div>
           </div>
           <div class="map-stat">
             <div class="map-stat-k">Avg Yrs in Biz</div>
             <div class="map-stat-v">${Number(m.avg_years).toFixed(1)}</div>
           </div>
-          <div class="map-stat">
-            <div class="map-stat-k">Dataset Share</div>
-            <div class="map-stat-v">${share}%</div>
-          </div>
-          <div class="map-stat">
-            <div class="map-stat-k">Prod. Value / Co.</div>
-            <div class="map-stat-v">${perCo}</div>
-          </div>
           <div class="map-stat map-stat-wide">
             <div class="map-stat-k">Top Sector</div>
             <div class="map-stat-v">${sec.label}${sec.badge ? ` <span class="map-sector-badge">${sec.badge}</span>` : ""}</div>
-          </div>
-          <div class="map-stat map-stat-wide">
-            <div class="map-stat-k">Total Prod. Value</div>
-            <div class="map-stat-v">${fmtEuro(m.total_revenue)}</div>
           </div>
         </div>
         <div class="map-insight"><strong>Quick read:</strong> ${insight}</div>`;
@@ -1240,7 +1315,7 @@ function ItalyMapTab({ regionMapData }) {
       <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
         Italy Regional Company Landscape
       </h2>
-      <p style={{ color: C.muted, fontSize: 12, margin: "0 0 16px" }}>
+      <p style={{ color: C.muted, fontSize: 14, margin: "0 0 16px" }}>
         Fiscal years 2018–2020  •  Colored by unique company count  •  Hover or click a region to explore stats
       </p>
 
@@ -1252,10 +1327,10 @@ function ItalyMapTab({ regionMapData }) {
 
       {/* Colour-scale legend */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px", marginBottom: 16 }}>
-        <p style={{ color: C.white, fontSize: 13, fontWeight: 700, margin: "0 0 4px" }}>Regional Density — Unique Companies</p>
-        <p style={{ color: C.muted, fontSize: 11, margin: "0 0 10px" }}>Darker blue = more unique companies in the filtered dataset</p>
+        <p style={{ color: C.white, fontSize: 15, fontWeight: 700, margin: "0 0 4px" }}>Regional Density — Unique Companies</p>
+        <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px" }}>Darker blue = more unique companies in the filtered dataset</p>
         <div style={{ height: 12, borderRadius: 999, background: `linear-gradient(90deg, #1B3560, #1B5E80, #0D9488, ${C.accent})`, marginBottom: 6 }} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.muted }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.muted }}>
           <span>Fewer companies</span><span>More companies</span>
         </div>
       </div>
@@ -1269,7 +1344,7 @@ function ItalyMapTab({ regionMapData }) {
           <div ref={ttRef} className="map-tooltip" />
           <svg ref={svgRef} viewBox="0 0 900 900" style={{ width: "100%", height: 620, display: "block" }} aria-label="Italy EDA regional map" />
         </div>
-        <p style={{ color: C.muted, fontSize: 9.5, textAlign: "center", margin: "8px 0 0" }}>
+        <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "8px 0 0" }}>
           GeoJSON: openpolis/geojson-italy (MIT)  •  Click a region to pin tooltip  •  Source: train_data.csv 2018–2020
         </p>
       </div>
@@ -1378,11 +1453,11 @@ function BoxPlotChart({ data }) {
 // === SPLIT CORRELATION MATRIX COMPONENT ===
 function SplitCorrMatrix({ corrData, title, accentColor }) {
   const { labels, matrix } = corrData;
-  if (!matrix || !matrix.length) return <p style={{ color: C.muted, fontSize: 11 }}>Insufficient data.</p>;
+  if (!matrix || !matrix.length) return <p style={{ color: C.muted, fontSize: 13 }}>Insufficient data.</p>;
   const targetIdx = labels.findIndex(l => l === "PVN★");
   return (
     <div>
-      <p style={{ color: accentColor, fontSize: 10, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>{title}</p>
+      <p style={{ color: accentColor, fontSize: 12, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>{title}</p>
       <div style={{ overflowX: "auto" }}>
         <table className="corr-table">
           <thead>
@@ -1398,7 +1473,7 @@ function SplitCorrMatrix({ corrData, title, accentColor }) {
           <tbody>
             {matrix.map((row, i) => (
               <tr key={i}>
-                <td style={{ color: C.light, fontSize: 10, textAlign: "right", paddingRight: 6, whiteSpace: "nowrap", fontWeight: i >= targetIdx && targetIdx >= 0 ? 700 : 400 }}>
+                <td style={{ color: C.light, fontSize: 12, textAlign: "right", paddingRight: 6, whiteSpace: "nowrap", fontWeight: i >= targetIdx && targetIdx >= 0 ? 700 : 400 }}>
                   {labels[i]}
                 </td>
                 {row.map((val, j) => (
@@ -1424,6 +1499,18 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
   const { featureTargetCorrs, financial: corrFinancial, ratios: corrRatios } = correlationData;
   const { pearsonR, scatterByYear } = yearsInBusinessData;
 
+  // Compute actual correlation ranges dynamically from the matrix
+  const pvIdx = corrFinancial.labels?.indexOf("PVN★") ?? -1;
+  const rcIdx = corrFinancial.labels?.indexOf("RCN★") ?? -1;
+  const nFeats = Math.max(0, (corrFinancial.labels?.length ?? 2) - 2);
+  const finPVCorrs = pvIdx >= 0 ? (corrFinancial.matrix?.slice(0, nFeats).map(row => Math.abs(row[pvIdx] ?? 0)) ?? []) : [];
+  const finRCCorrs = rcIdx >= 0 ? (corrFinancial.matrix?.slice(0, nFeats).map(row => Math.abs(row[rcIdx] ?? 0)) ?? []) : [];
+  const finPVMax = finPVCorrs.length ? Math.max(...finPVCorrs).toFixed(2) : "—";
+  const finPVMin = finPVCorrs.length ? Math.min(...finPVCorrs).toFixed(2) : "—";
+  const finRCMax = finRCCorrs.length ? Math.max(...finRCCorrs).toFixed(2) : "—";
+  const maxPVCorr = featureTargetCorrs?.length ? Math.max(...featureTargetCorrs.map(d => Math.abs(d.corrPV))).toFixed(2) : "—";
+  const maxRCCorr = featureTargetCorrs?.length ? Math.max(...featureTargetCorrs.map(d => Math.abs(d.corrRC))).toFixed(2) : "—";
+
   return (
     <>
       {/* ── HERO ── */}
@@ -1431,7 +1518,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
         <h2 style={{ color: C.white, fontSize: 28, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
           Italian Company Revenue Dataset
         </h2>
-        <p style={{ color: C.muted, fontSize: 12, margin: "0 0 20px", lineHeight: 1.6 }}>
+        <p style={{ color: C.muted, fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
           This dataset captures financial statements for Italian companies across fiscal years 2018–2021.
           The prediction challenge: <b style={{ color: C.accent }}>forecast next-year revenue change (%)</b> from current-year financials.
           The analysis below shows why we select <b style={{ color: C.gold }}>production_value_next</b> as the primary modeling target — it is measurable, has strong feature correlations, and avoids the volatility of percentage change as a direct target.
@@ -1454,8 +1541,8 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
       <Card>
         <BoxPlotChart data={outliersData} />
         <div style={{ background: `${C.gold}0F`, border: `1px solid ${C.gold}25`, borderRadius: 8, padding: "10px 14px", marginTop: 12 }}>
-          <p style={{ color: C.gold, fontSize: 10, fontWeight: 700, margin: "0 0 4px", textTransform: "uppercase", letterSpacing: 1 }}>How we handle outliers</p>
-          <p style={{ color: C.light, fontSize: 11, lineHeight: 1.6, margin: 0 }}>
+          <p style={{ color: C.gold, fontSize: 12, fontWeight: 700, margin: "0 0 4px", textTransform: "uppercase", letterSpacing: 1 }}>How we handle outliers</p>
+          <p style={{ color: C.light, fontSize: 13, lineHeight: 1.6, margin: 0 }}>
             We <b style={{ color: C.accent }}>do not remove</b> outliers — they represent real business events (mergers, rapid expansion). Instead: (1) log-transform monetary features before modeling, (2) use <b style={{ color: C.accent }}>winsorisation at P1/P99</b> for ratio features prone to division instability, and (3) rely on <b style={{ color: C.gold }}>tree-based models</b> (XGBoost, Random Forest) which are inherently robust to scale outliers.
           </p>
         </div>
@@ -1464,41 +1551,41 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
       {/* ── SPLIT CORRELATION MATRICES (pooled) ── */}
       <Heading
         sub="Pearson correlation — split by feature type (pooled 2018–2020). ★ = prediction targets"
-        insight="Financial size features correlate 0.6–0.9 with each other but <0.15 with RCN★ — predicting PVN★ is far easier than % change"
+        insight={`Financial size features show PVN★ correlations of ${finPVMin}–${finPVMax} but only up to ${finRCMax} with RCN★ — predicting PVN★ is far more tractable than predicting % change directly`}
       >
         Feature Correlation Matrices
       </Heading>
       <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <Card>
           <SplitCorrMatrix corrData={corrFinancial} title="Financial Size Features" accentColor={C.gold} />
-          <p style={{ color: C.muted, fontSize: 9, marginTop: 8, marginBottom: 0 }}>★ = target columns  •  Hover cells for exact values</p>
+          <p style={{ color: C.muted, fontSize: 13, marginTop: 8, marginBottom: 0 }}>★ = target columns  •  Hover cells for exact values</p>
         </Card>
         <Card>
           <SplitCorrMatrix corrData={corrRatios} title="Financial Ratios" accentColor={C.blue} />
-          <p style={{ color: C.muted, fontSize: 9, marginTop: 8, marginBottom: 0 }}>★ = target columns  •  Hover cells for exact values</p>
+          <p style={{ color: C.muted, fontSize: 13, marginTop: 8, marginBottom: 0 }}>★ = target columns  •  Hover cells for exact values</p>
         </Card>
       </div>
 
       {/* ── FEATURE → TARGET COMPARISON ── */}
       <Heading
         sub="Left: correlations with production_value_next (our target). Right: correlations with revenue_change_next (what we derive post-hoc)"
-        insight="PV Next correlations (0.8–0.9) are 5–10× stronger than RC Next (<0.15) — confirming the target choice"
+        insight={`Strongest PVN★ correlation: ${maxPVCorr} · Strongest RCN★ correlation: ${maxRCCorr} — PVN★ is significantly more predictable, justifying the two-stage approach`}
       >
         Why production_value_next? Feature Correlation Comparison
       </Heading>
       {featureTargetCorrs && featureTargetCorrs.length > 0 && (
         <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <Card>
-            <p style={{ color: C.gold, fontSize: 10, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
+            <p style={{ color: C.gold, fontSize: 12, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
               production_value_next — Normal Signal
             </p>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={featureTargetCorrs} layout="vertical" barCategoryGap="12%" margin={{ left: 8, right: 28, top: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                <XAxis type="number" domain={[-0.5, 0.5]} ticks={[-0.5, -0.25, 0, 0.25, 0.5]} tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
-                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} width={95} />
+                <XAxis type="number" domain={[-0.5, 0.5]} ticks={[-0.5, -0.25, 0, 0.25, 0.5]} tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
+                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} width={95} />
                 <ReferenceLine x={0} stroke={C.muted} strokeWidth={1.5} />
-                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with PV Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.gold }} />
+                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with PV Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.gold }} />
                 <Bar dataKey="corrPV" name="Corr with PV Next" radius={[0, 4, 4, 0]}>
                   {featureTargetCorrs.map((d, i) => <Cell key={i} fill={d.corrPV >= 0 ? C.gold : C.coral} />)}
                 </Bar>
@@ -1506,16 +1593,16 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
             </ResponsiveContainer>
           </Card>
           <Card>
-            <p style={{ color: C.coral, fontSize: 10, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
+            <p style={{ color: C.coral, fontSize: 12, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
               revenue_change_next — Weak Signal
             </p>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={featureTargetCorrs} layout="vertical" barCategoryGap="12%" margin={{ left: 8, right: 28, top: 4, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                <XAxis type="number" domain={[-0.3, 0.3]} ticks={[-0.3, -0.15, 0, 0.15, 0.3]} tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
-                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} width={95} />
+                <XAxis type="number" domain={[-0.3, 0.3]} ticks={[-0.3, -0.15, 0, 0.15, 0.3]} tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
+                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} width={95} />
                 <ReferenceLine x={0} stroke={C.muted} strokeWidth={1.5} />
-                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with RC Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 11 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.blue }} />
+                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with RC Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.blue }} />
                 <Bar dataKey="corrRC" name="Corr with RC Next" radius={[0, 4, 4, 0]}>
                   {featureTargetCorrs.map((d, i) => <Cell key={i} fill={Math.abs(d.corrRC) < 0.1 ? C.muted : d.corrRC >= 0 ? C.blue : C.coral} />)}
                 </Bar>
@@ -1539,7 +1626,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
             const clr = [C.blue, C.accent, C.gold][yi];
             return (
               <div key={yr}>
-                <p style={{ color: clr, fontSize: 10, fontWeight: 700, textAlign: "center", margin: "0 0 4px" }}>
+                <p style={{ color: clr, fontSize: 12, fontWeight: 700, textAlign: "center", margin: "0 0 4px" }}>
                   fiscal_year = {yr}
                 </p>
                 <ResponsiveContainer width="100%" height={220}>
@@ -1548,20 +1635,20 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
                     <XAxis
                       dataKey="x" name="years_in_business" type="number"
                       domain={[0, 70]} tickCount={8}
-                      tick={{ fill: C.muted, fontSize: 8 }} axisLine={{ stroke: C.border }}
-                      label={{ value: "years_in_business", position: "insideBottom", offset: -18, fill: C.muted, fontSize: 8 }}
+                      tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }}
+                      label={{ value: "years_in_business", position: "insideBottom", offset: -18, fill: C.muted, fontSize: 10 }}
                     />
                     <YAxis
                       dataKey="y" name="revenue_change_next" type="number"
                       domain={[0, 6000]}
-                      tick={{ fill: C.muted, fontSize: 8 }} axisLine={{ stroke: C.border }} width={44}
-                      label={{ value: "revenue_change_next", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 8, dx: -2 }}
+                      tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} width={44}
+                      label={{ value: "revenue_change_next", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 10, dx: -2 }}
                     />
                     <ZAxis range={[12, 12]} />
                     <Tooltip
                       cursor={{ strokeDasharray: "3 3" }}
                       formatter={(v, n) => [v, n]}
-                      contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 10 }}
+                      contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }}
                     />
                     <Scatter data={pts} fill={clr} fillOpacity={0.35} />
                   </ScatterChart>
@@ -1570,11 +1657,11 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
             );
           })}
         </div>
-        <p style={{ color: C.muted, fontSize: 9.5, textAlign: "center", margin: "8px 0 0" }}>
+        <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "8px 0 0" }}>
           Points sampled for performance  •  y-axis capped at 6000% to show cluster structure  •  Pearson r = {pearsonR}
         </p>
         <div style={{ background: `${C.coral}10`, border: `1px solid ${C.coral}25`, borderRadius: 8, padding: "10px 14px", marginTop: 10 }}>
-          <span style={{ color: C.coral, fontSize: 11, fontWeight: 600 }}>
+          <span style={{ color: C.coral, fontSize: 13, fontWeight: 600 }}>
             Key takeaway: The point cloud is structurally identical across all 3 years — dense near zero, sparse at extremes, no age gradient.
             Company age carries <b>zero predictive signal</b>. Do not include <code>years_in_business</code> as a raw feature.
           </span>
@@ -1584,27 +1671,27 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
       {/* ── TARGET VARIABLE CONSTRUCTION (moved to end) ── */}
       <Heading
         sub="How the prediction target is constructed"
-        insight="We predict production_value_next (absolute) then derive % change — far more predictable than raw % change"
+        insight="Two-stage approach: predict PVN★ (higher feature correlations) → derive revenue_change_next post-hoc for final evaluation"
       >
         Target Variable Construction
       </Heading>
       <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 4 }}>
         <Card>
-          <p style={{ color: C.muted, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", margin: "0 0 8px" }}>Primary Modeling Target</p>
-          <div style={{ background: `${C.gold}12`, border: `1px solid ${C.gold}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 10, fontFamily: "monospace", fontSize: 13, color: C.gold }}>
-            production_value_next = PV<sub style={{ fontSize: 10 }}>t+1</sub>
+          <p style={{ color: C.muted, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", margin: "0 0 8px" }}>Primary Modeling Target</p>
+          <div style={{ background: `${C.gold}12`, border: `1px solid ${C.gold}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 10, fontFamily: "monospace", fontSize: 15, color: C.gold }}>
+            production_value_next = PV<sub style={{ fontSize: 12 }}>t+1</sub>
           </div>
-          <p style={{ color: C.light, fontSize: 12, lineHeight: 1.6, margin: 0 }}>
-            The absolute production value of the next fiscal year, per company. Computed by shifting each company's time series by −1. This is our <b style={{ color: C.gold }}>actual model target</b> since it correlates strongly (0.8–0.9) with current-year financials.
+          <p style={{ color: C.light, fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+            The absolute production value of the next fiscal year, per company. Computed by shifting each company's time series by −1. We use this as our <b style={{ color: C.gold }}>intermediate modeling target</b> because it correlates meaningfully with current-year financials — significantly more so than revenue_change_next. However, the model is ultimately <b style={{ color: C.coral }}>evaluated on revenue_change_next</b> (the actual business question), which is derived post-prediction from predicted PV<sub style={{ fontSize: 12 }}>t+1</sub> and known PV<sub style={{ fontSize: 12 }}>t</sub>.
           </p>
         </Card>
         <Card>
-          <p style={{ color: C.muted, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", margin: "0 0 8px" }}>Business Interpretation</p>
-          <div style={{ background: `${C.accent}12`, border: `1px solid ${C.accent}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 10, fontFamily: "monospace", fontSize: 13, color: C.accent }}>
-            revenue_change_next = (PV<sub style={{ fontSize: 10 }}>t+1</sub> − PV<sub style={{ fontSize: 10 }}>t</sub>) / PV<sub style={{ fontSize: 10 }}>t</sub> × 100
+          <p style={{ color: C.muted, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", margin: "0 0 8px" }}>Business Interpretation</p>
+          <div style={{ background: `${C.accent}12`, border: `1px solid ${C.accent}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 10, fontFamily: "monospace", fontSize: 15, color: C.accent }}>
+            revenue_change_next = (PV<sub style={{ fontSize: 12 }}>t+1</sub> − PV<sub style={{ fontSize: 12 }}>t</sub>) / PV<sub style={{ fontSize: 12 }}>t</sub> × 100
           </div>
-          <p style={{ color: C.light, fontSize: 12, lineHeight: 1.6, margin: 0 }}>
-            The percentage change is what clients care about, but it is <b style={{ color: C.coral }}>noisy</b> (corr &lt;0.15 with any feature). We compute it <i>post-prediction</i> from predicted PV<sub style={{ fontSize: 10 }}>t+1</sub> and observed PV<sub style={{ fontSize: 10 }}>t</sub>.
+          <p style={{ color: C.light, fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+            The percentage change in revenue is the <b style={{ color: C.accent }}>actual evaluation metric</b> — this is what the challenge scores us on. It is harder to predict directly (low feature correlations). We derive it <i>post-prediction</i>: revenue_change_next = (predicted PV<sub style={{ fontSize: 12 }}>t+1</sub> − observed PV<sub style={{ fontSize: 12 }}>t</sub>) / PV<sub style={{ fontSize: 12 }}>t</sub> × 100.
           </p>
         </Card>
       </div>
@@ -1637,7 +1724,7 @@ export default function App() {
   if (loading) return (
     <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, fontFamily: "'DM Sans', sans-serif" }}>
       <div className="spinner" />
-      <p style={{ color: C.accent, fontSize: 14, margin: 0 }}>Loading train_data.csv…</p>
+      <p style={{ color: C.accent, fontSize: 16, margin: 0 }}>Loading train_data.csv…</p>
     </div>
   );
 
@@ -1645,8 +1732,8 @@ export default function App() {
     <div style={{ background: C.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
       <div style={{ background: C.card, border: `1px solid ${C.coral}`, borderRadius: 10, padding: "24px 32px", maxWidth: 480 }}>
         <p style={{ color: C.coral, fontSize: 15, fontWeight: 700, margin: "0 0 8px" }}>Failed to load data</p>
-        <p style={{ color: C.light, fontSize: 13, margin: 0 }}>{error}</p>
-        <p style={{ color: C.muted, fontSize: 11, margin: "10px 0 0" }}>Ensure <code>train_data.csv</code> is in the <code>public/</code> folder.</p>
+        <p style={{ color: C.light, fontSize: 15, margin: 0 }}>{error}</p>
+        <p style={{ color: C.muted, fontSize: 13, margin: "10px 0 0" }}>Ensure <code>train_data.csv</code> is in the <code>public/</code> folder.</p>
       </div>
     </div>
   );
@@ -1711,7 +1798,7 @@ export default function App() {
           <div style={{ width: 5, height: 28, background: C.accent, borderRadius: 3 }} />
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Revenue Forecasting — EDA Intelligence</h1>
         </div>
-        <p style={{ color: C.muted, fontSize: 11, margin: "2px 0 14px 15px", letterSpacing: 0.4 }}>
+        <p style={{ color: C.muted, fontSize: 13, margin: "2px 0 14px 15px", letterSpacing: 0.4 }}>
           Challenge 3  •  {uniqueCompanies.toLocaleString()} unique Italian companies  •  {totalRows.toLocaleString()} observations across 2018–2020  •  Target: next-year revenue change (%)
         </p>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -1738,7 +1825,7 @@ export default function App() {
             <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
               Revenue Signals — Advanced Pattern Analysis
             </h2>
-            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 20px" }}>
+            <p style={{ color: C.muted, fontSize: 14, margin: "0 0 20px" }}>
               Cross-year pooled signals derived from 2018–2020 cohorts  •  Target = next-year revenue change  •  Each signal isolates a structural driver
             </p>
 
@@ -1753,19 +1840,19 @@ export default function App() {
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={signalData.tierTarget} barCategoryGap="12%">
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                  <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={46} />
+                  <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 14 }} axisLine={{ stroke: C.border }} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={46} />
                   <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
                   <Tooltip content={<Tip sfx="%" />} />
                   <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 10, fontWeight: 700 }} />
+                    <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 12, fontWeight: 700 }} />
                     {signalData.tierTarget.map((d, i) => <Cell key={i} fill={d.medTarget > 0 ? C.accent : C.coral} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
               <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 6, flexWrap: "wrap" }}>
                 {signalData.tierTarget.map((d, i) => (
-                  <span key={i} style={{ fontSize: 9.5, color: C.muted }}>{d.tier}: <b style={{ color: C.light }}>{d.n}</b> obs.</span>
+                  <span key={i} style={{ fontSize: 11, color: C.muted }}>{d.tier}: <b style={{ color: C.light }}>{d.n}</b> obs.</span>
                 ))}
               </div>
             </Card>
@@ -1781,12 +1868,12 @@ export default function App() {
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={signalData.tierShift} barCategoryGap="22%" margin={{ top: 28, left: 4, right: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                  <XAxis dataKey="shift" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={46} />
+                  <XAxis dataKey="shift" tick={{ fill: C.light, fontSize: 14 }} axisLine={{ stroke: C.border }} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={46} />
                   <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
                   <Tooltip content={<Tip sfx="%" />} />
                   <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 11, fontWeight: 700 }} />
+                    <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 13, fontWeight: 700 }} />
                     {signalData.tierShift.map((_, i) => (
                       <Cell key={i} fill={[C.coral, "#FF9F7F", C.blue, "#66BB6A", C.accent][i]} />
                     ))}
@@ -1795,7 +1882,7 @@ export default function App() {
               </ResponsiveContainer>
               <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 6, flexWrap: "wrap" }}>
                 {signalData.tierShift.map((d, i) => (
-                  <span key={i} style={{ fontSize: 9.5, color: C.muted }}>Shift {d.shift}: <b style={{ color: C.light }}>{d.n}</b> obs.</span>
+                  <span key={i} style={{ fontSize: 11, color: C.muted }}>Shift {d.shift}: <b style={{ color: C.light }}>{d.n}</b> obs.</span>
                 ))}
               </div>
             </Card>
@@ -1813,20 +1900,20 @@ export default function App() {
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={signalData.tierPersistence} barCategoryGap="10%" stackOffset="none">
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                      <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} />
-                      <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} domain={[0, 100]} width={44} />
+                      <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} />
+                      <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} domain={[0, 100]} width={44} />
                       <Tooltip
                         formatter={(v, name) => [`${v}%`, name]}
                         contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8 }}
                         labelStyle={{ color: C.white, fontWeight: 700 }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 10 }} formatter={v => <span style={{ color: C.light }}>{v}</span>} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => <span style={{ color: C.light }}>{v}</span>} />
                       <Bar dataKey="stay" name="Stayed" stackId="a" fill={C.accent}  radius={[0, 0, 0, 0]} />
                       <Bar dataKey="up"   name="Moved Up"   stackId="a" fill={C.blue}   radius={[0, 0, 0, 0]} />
                       <Bar dataKey="down" name="Moved Down" stackId="a" fill={C.coral}  radius={[3, 3, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                  <p style={{ color: C.muted, fontSize: 9.5, textAlign: "center", margin: "4px 0 0" }}>
+                  <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "4px 0 0" }}>
                     Stacked 100%  •  Green = stayed same tier  •  Blue = climbed  •  Red = fell
                   </p>
                 </Card>
@@ -1843,20 +1930,20 @@ export default function App() {
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={signalData.extremeEvents} barCategoryGap="10%" barGap={2}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                      <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} />
-                      <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={44} />
+                      <XAxis dataKey="tier" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} />
+                      <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => `${v}%`} width={44} />
                       <Tooltip
                         formatter={(v, name) => [`${v}%`, name]}
                         contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8 }}
                         labelStyle={{ color: C.white, fontWeight: 700 }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 10 }} formatter={v => <span style={{ color: C.light }}>{v}</span>} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => <span style={{ color: C.light }}>{v}</span>} />
                       <Bar dataKey="pct100"   name=">100% Jump"  fill={C.accent}  radius={[3, 3, 0, 0]} />
                       <Bar dataKey="pct200"   name=">200% Jump"  fill={C.purple}  radius={[3, 3, 0, 0]} />
                       <Bar dataKey="pctNeg50" name="<−50% Drop"  fill={C.coral}   radius={[3, 3, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                  <p style={{ color: C.muted, fontSize: 9.5, textAlign: "center", margin: "4px 0 0" }}>
+                  <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "4px 0 0" }}>
                     % of companies in each tier experiencing the event next year  •  Pooled 2018–2020
                   </p>
                 </Card>
@@ -1876,12 +1963,12 @@ export default function App() {
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={signalData.growthMomentum} barCategoryGap="22%" margin={{ top: 28, left: 4, right: 4, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                      <XAxis dataKey="bucket" tick={{ fill: C.light, fontSize: 11 }} axisLine={{ stroke: C.border }} />
-                      <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} domain={gmAxis.domain} ticks={gmAxis.ticks} tickFormatter={v => `${v}%`} width={52} />
+                      <XAxis dataKey="bucket" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} />
+                      <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} domain={gmAxis.domain} ticks={gmAxis.ticks} tickFormatter={v => `${v}%`} width={52} />
                       <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
                       <Tooltip content={<Tip sfx="%" />} />
                       <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
-                        <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 10, fontWeight: 700 }} />
+                        <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 12, fontWeight: 700 }} />
                         {signalData.growthMomentum.map((d, i) => <Cell key={i} fill={d.medTarget > 0 ? C.accent : C.coral} />)}
                       </Bar>
                     </BarChart>
@@ -1889,17 +1976,17 @@ export default function App() {
                   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <th style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: "left", padding: "5px 8px" }}>Current Growth Bucket</th>
-                        <th style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "5px 8px" }}>Observations</th>
-                        <th style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "5px 8px" }}>Median Target</th>
+                        <th style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: "left", padding: "5px 8px" }}>Current Growth Bucket</th>
+                        <th style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "5px 8px" }}>Observations</th>
+                        <th style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", textAlign: "right", padding: "5px 8px" }}>Median Target</th>
                       </tr>
                     </thead>
                     <tbody>
                       {signalData.growthMomentum.map((d, i) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                          <td style={{ padding: "5px 8px", color: C.light, fontSize: 11 }}>{d.bucket}</td>
-                          <td style={{ padding: "5px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>{d.n.toLocaleString()}</td>
-                          <td style={{ padding: "5px 8px", textAlign: "right", color: d.medTarget > 0 ? C.accent : C.coral, fontSize: 12, fontWeight: 700 }}>
+                          <td style={{ padding: "5px 8px", color: C.light, fontSize: 13 }}>{d.bucket}</td>
+                          <td style={{ padding: "5px 8px", textAlign: "right", color: C.muted, fontSize: 13 }}>{d.n.toLocaleString()}</td>
+                          <td style={{ padding: "5px 8px", textAlign: "right", color: d.medTarget > 0 ? C.accent : C.coral, fontSize: 14, fontWeight: 700 }}>
                             {d.medTarget > 0 ? "+" : ""}{d.medTarget}%
                           </td>
                         </tr>
@@ -1920,28 +2007,28 @@ export default function App() {
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={signalData.equityGap} barCategoryGap="30%" margin={{ top: 28, left: 4, right: 4, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                      <XAxis dataKey="group" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} />
-                      <YAxis tick={{ fill: C.muted, fontSize: 11 }} axisLine={{ stroke: C.border }} domain={eqAxis.domain} ticks={eqAxis.ticks} tickFormatter={v => `${v}%`} width={52} />
+                      <XAxis dataKey="group" tick={{ fill: C.light, fontSize: 14 }} axisLine={{ stroke: C.border }} />
+                      <YAxis tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} domain={eqAxis.domain} ticks={eqAxis.ticks} tickFormatter={v => `${v}%`} width={52} />
                       <ReferenceLine y={0} stroke={C.muted} strokeWidth={2} />
                       <Tooltip content={<Tip sfx="%" />} />
                       <Bar dataKey="medTarget" name="Median Target %" radius={[4, 4, 0, 0]}>
-                        <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 11, fontWeight: 700 }} />
+                        <LabelList dataKey="medTarget" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 13, fontWeight: 700 }} />
                         {signalData.equityGap.map((_, i) => <Cell key={i} fill={[C.coral, C.blue, C.accent][i]} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                   <div style={{ background: `${C.navy}`, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px", marginTop: 14 }}>
-                    <p style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 6px", fontWeight: 600 }}>Signal Construction</p>
-                    <p style={{ color: C.light, fontSize: 11, lineHeight: 1.6, margin: 0 }}>
+                    <p style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", margin: "0 0 6px", fontWeight: 600 }}>Signal Construction</p>
+                    <p style={{ color: C.light, fontSize: 13, lineHeight: 1.6, margin: 0 }}>
                       <b style={{ color: C.coral }}>Withdrawal</b> — shareholders removed equity beyond retained earnings<br />
                       <b style={{ color: C.blue }}>Neutral</b> — equity change ≈ expected from profits alone<br />
                       <b style={{ color: C.accent }}>Injection</b> — fresh capital infused (rights issue, shareholder loans)<br />
-                      <span style={{ color: C.muted, fontSize: 10 }}>Threshold ±4% of total assets  •  Requires 2+ consecutive years</span>
+                      <span style={{ color: C.muted, fontSize: 12 }}>Threshold ±4% of total assets  •  Requires 2+ consecutive years</span>
                     </p>
                   </div>
                   <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 10 }}>
                     {signalData.equityGap.map((d, i) => (
-                      <span key={i} style={{ fontSize: 9.5, color: C.muted }}>{d.group}: <b style={{ color: C.light }}>{d.n.toLocaleString()}</b> obs.</span>
+                      <span key={i} style={{ fontSize: 11, color: C.muted }}>{d.group}: <b style={{ color: C.light }}>{d.n.toLocaleString()}</b> obs.</span>
                     ))}
                   </div>
                 </Card>
@@ -1975,10 +2062,10 @@ export default function App() {
               ].map((t, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${t.color}`, borderRadius: 8, padding: "16px 18px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: t.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: C.bg }}>{t.num}</div>
-                    <span style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>{t.title}</span>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: t.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: C.bg }}>{t.num}</div>
+                    <span style={{ color: C.white, fontSize: 16, fontWeight: 700 }}>{t.title}</span>
                   </div>
-                  <p style={{ color: C.light, fontSize: 12, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
+                  <p style={{ color: C.light, fontSize: 14, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
                 </div>
               ))}
             </div>
@@ -1990,7 +2077,7 @@ export default function App() {
             <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
               3-Year Comparison & Strategic Insights
             </h2>
-            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 16px" }}>
+            <p style={{ color: C.muted, fontSize: 14, margin: "0 0 16px" }}>
               How the revenue forecasting landscape evolved across 2018→2019, 2019→2020, and 2020→2021
             </p>
 
@@ -2008,12 +2095,12 @@ export default function App() {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={crossYear} barCategoryGap="25%">
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                  <XAxis dataKey="year" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} />
+                  <XAxis dataKey="year" tick={{ fill: C.light, fontSize: 14 }} axisLine={{ stroke: C.border }} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 12 }} axisLine={{ stroke: C.border }} />
                   <ReferenceLine y={0} stroke={C.border} strokeWidth={2} />
                   <Tooltip content={<Tip sfx="%" />} />
                   <Bar dataKey="median" name="Median Target %" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="median" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 12, fontWeight: 700 }} />
+                    <LabelList dataKey="median" position="top" formatter={v => `${v > 0 ? "+" : ""}${v}%`} style={{ fill: C.light, fontSize: 14, fontWeight: 700 }} />
                     {crossYear.map((_, i) => <Cell key={i} fill={[C.accent, C.blue, C.gold][i]} />)}
                   </Bar>
                 </BarChart>
@@ -2039,14 +2126,14 @@ export default function App() {
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
                   <XAxis
                     type="number"
-                    tick={{ fill: C.muted, fontSize: 12 }}
+                    tick={{ fill: C.muted, fontSize: 14 }}
                     axisLine={{ stroke: C.border }}
                     tickFormatter={v => `${v > 0 ? "+" : ""}${v}%`}
                   />
                   <YAxis
                     dataKey="sector"
                     type="category"
-                    tick={{ fill: C.light, fontSize: 12 }}
+                    tick={{ fill: C.light, fontSize: 14 }}
                     axisLine={{ stroke: C.border }}
                     width={200}
                   />
@@ -2057,21 +2144,21 @@ export default function App() {
                   />
                   <ReferenceLine x={0} stroke={C.muted} strokeWidth={2} />
                   <Legend
-                    wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
+                    wrapperStyle={{ fontSize: 13, paddingTop: 10 }}
                     formatter={value => <span style={{ color: C.light }}>{value}</span>}
                   />
                   <Bar dataKey="2018→19" name="2018→19  Pre-COVID" fill={C.accent} radius={[0, 3, 3, 0]}>
-                    <LabelList dataKey="2018→19" position="right" formatter={v => v != null ? `${v > 0 ? "+" : ""}${v}%` : ""} style={{ fill: C.muted, fontSize: 9 }} />
+                    <LabelList dataKey="2018→19" position="right" formatter={v => v != null ? `${v > 0 ? "+" : ""}${v}%` : ""} style={{ fill: C.muted, fontSize: 11 }} />
                   </Bar>
                   <Bar dataKey="2019→20" name="2019→20  COVID Shock" fill={C.coral} radius={[0, 3, 3, 0]}>
-                    <LabelList dataKey="2019→20" position="right" formatter={v => v != null ? `${v > 0 ? "+" : ""}${v}%` : ""} style={{ fill: C.muted, fontSize: 9 }} />
+                    <LabelList dataKey="2019→20" position="right" formatter={v => v != null ? `${v > 0 ? "+" : ""}${v}%` : ""} style={{ fill: C.muted, fontSize: 11 }} />
                   </Bar>
                   <Bar dataKey="2020→21" name="2020→21  Recovery" fill={C.gold} radius={[0, 3, 3, 0]}>
-                    <LabelList dataKey="2020→21" position="right" formatter={v => v != null ? `${v > 0 ? "+" : ""}${v}%` : ""} style={{ fill: C.muted, fontSize: 9 }} />
+                    <LabelList dataKey="2020→21" position="right" formatter={v => v != null ? `${v > 0 ? "+" : ""}${v}%` : ""} style={{ fill: C.muted, fontSize: 11 }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              <p style={{ color: C.muted, fontSize: 9.5, textAlign: "center", margin: "4px 0 0" }}>
+              <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "4px 0 0" }}>
                 Sorted by 2019→20 COVID shock (worst at top)  •  Median revenue_change per sector-year cohort  •  Source: train_data.csv
               </p>
             </Card>
@@ -2085,16 +2172,16 @@ export default function App() {
                   const clr = [C.accent, C.blue, C.gold][yi];
                   return (
                     <div key={yr} style={{ border: `1px solid ${C.border}`, borderTop: `3px solid ${clr}`, borderRadius: 8, padding: "12px" }}>
-                      <p style={{ color: clr, fontSize: 13, fontWeight: 700, margin: "0 0 8px" }}>{d.label}</p>
+                      <p style={{ color: clr, fontSize: 15, fontWeight: 700, margin: "0 0 8px" }}>{d.label}</p>
                       {d.quantiles.map((q, i) => (
                         <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: q.q === "Q50" ? `1px solid ${clr}40` : "none" }}>
-                          <span style={{ color: q.q === "Q50" ? clr : C.muted, fontSize: 11, fontWeight: q.q === "Q50" ? 700 : 400 }}>{q.q}</span>
-                          <span style={{ color: q.val > 0 ? C.accent : C.coral, fontSize: 11, fontWeight: 600 }}>{q.val > 0 ? "+" : ""}{q.val.toLocaleString()}%</span>
+                          <span style={{ color: q.q === "Q50" ? clr : C.muted, fontSize: 13, fontWeight: q.q === "Q50" ? 700 : 400 }}>{q.q}</span>
+                          <span style={{ color: q.val > 0 ? C.accent : C.coral, fontSize: 13, fontWeight: 600 }}>{q.val > 0 ? "+" : ""}{q.val.toLocaleString()}%</span>
                         </div>
                       ))}
                       <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0 0", marginTop: 4, borderTop: `1px solid ${C.border}` }}>
-                        <span style={{ color: C.muted, fontSize: 10 }}>IQR</span>
-                        <span style={{ color: C.orange, fontSize: 11, fontWeight: 700 }}>{d.target.iqr.toFixed(1)}pp</span>
+                        <span style={{ color: C.muted, fontSize: 12 }}>IQR</span>
+                        <span style={{ color: C.orange, fontSize: 13, fontWeight: 700 }}>{d.target.iqr.toFixed(1)}pp</span>
                       </div>
                     </div>
                   );
@@ -2108,12 +2195,12 @@ export default function App() {
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={crossYear} barCategoryGap="25%">
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                  <XAxis dataKey="year" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} />
-                  <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} />
+                  <XAxis dataKey="year" tick={{ fill: C.light, fontSize: 14 }} axisLine={{ stroke: C.border }} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 12 }} axisLine={{ stroke: C.border }} />
                   <Tooltip content={<Tip />} />
                   <Bar dataKey="std" name="Std Deviation" fill={C.coral} radius={[4, 4, 0, 0]} />
                   <Bar dataKey="iqr" name="IQR"           fill={C.blue}  radius={[4, 4, 0, 0]} />
-                  <Legend wrapperStyle={{ fontSize: 11, color: C.muted }} />
+                  <Legend wrapperStyle={{ fontSize: 13, color: C.muted }} />
                 </BarChart>
               </ResponsiveContainer>
             </Card>
@@ -2122,14 +2209,14 @@ export default function App() {
             <Heading sub="The 'funnel pattern' — consistent across all three years" insight="Most actionable finding: company revenue size should be a primary feature in any predictive model">Size Effect: Consistent Across Years</Heading>
             <Card>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <p style={{ color: C.muted, fontSize: 10, margin: 0 }}>
+                <p style={{ color: C.muted, fontSize: 12, margin: 0 }}>
                   √ scale — equal bar height = equal proportional change · hover for exact %
                 </p>
                 <div style={{ display: "flex", gap: 8 }}>
                   {[["2018→19", C.accent], ["2019→20", C.blue], ["2020→21", C.gold]].map(([lbl, col]) => (
                     <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                       <div style={{ width: 10, height: 10, borderRadius: 2, background: col }} />
-                      <span style={{ color: C.muted, fontSize: 10 }}>{lbl}</span>
+                      <span style={{ color: C.muted, fontSize: 12 }}>{lbl}</span>
                     </div>
                   ))}
                 </div>
@@ -2148,15 +2235,15 @@ export default function App() {
                   }));
                 })()} barCategoryGap="14%">
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 10 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={60} interval={0} />
+                  <XAxis dataKey="name" tick={{ fill: C.light, fontSize: 12 }} axisLine={{ stroke: C.border }} angle={-30} textAnchor="end" height={60} interval={0} />
                   <YAxis
-                    tick={{ fill: C.muted, fontSize: 11 }}
+                    tick={{ fill: C.muted, fontSize: 13 }}
                     axisLine={{ stroke: C.border }}
                     width={68}
                     ticks={[-10, 0, 10, 20, 30, 40, 50]}
                     domain={[-10, 52]}
                     tickFormatter={v => { const r = Math.sign(v) * Math.round(v * v); return (r > 0 ? '+' : '') + r + '%'; }}
-                    label={{ value: "Median Target % (√ scale)", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 9, dx: -16 }}
+                    label={{ value: "Median Target % (√ scale)", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 11, dx: -16 }}
                   />
                   <ReferenceLine y={0} stroke={C.border} strokeWidth={2} />
                   <Tooltip content={({ active, payload }) => {
@@ -2164,9 +2251,9 @@ export default function App() {
                     const d = payload[0]?.payload;
                     return (
                       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px" }}>
-                        <p style={{ color: C.white, fontWeight: 700, fontSize: 12, margin: "0 0 6px" }}>{d?.name}</p>
+                        <p style={{ color: C.white, fontWeight: 700, fontSize: 14, margin: "0 0 6px" }}>{d?.name}</p>
                         {[["2018→19", C.accent, d?.r18], ["2019→20", C.blue, d?.r19], ["2020→21", C.gold, d?.r20]].map(([lbl, col, val]) => (
-                          <p key={lbl} style={{ color: col, fontSize: 11, margin: "2px 0", fontWeight: 600 }}>
+                          <p key={lbl} style={{ color: col, fontSize: 13, margin: "2px 0", fontWeight: 600 }}>
                             {lbl}: {val != null ? (val > 0 ? '+' : '') + Math.round(val) + '%' : 'N/A'}
                           </p>
                         ))}
@@ -2178,7 +2265,7 @@ export default function App() {
                   <Bar dataKey="v20" fill={C.gold}   name="2020→21" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-              <p style={{ color: C.muted, fontSize: 9, margin: "6px 0 0", textAlign: "center" }}>
+              <p style={{ color: C.muted, fontSize: 11, margin: "6px 0 0", textAlign: "center" }}>
                 Tick labels show real % values · +100% → tick 10 · +400% → tick 20 · +900% → tick 30 · +2500% → tick 50
               </p>
             </Card>
@@ -2194,10 +2281,10 @@ export default function App() {
               ].map((t, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${t.color}`, borderRadius: 8, padding: "16px 18px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: t.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: C.bg }}>{t.num}</div>
-                    <span style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>{t.title}</span>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: t.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: C.bg }}>{t.num}</div>
+                    <span style={{ color: C.white, fontSize: 16, fontWeight: 700 }}>{t.title}</span>
                   </div>
-                  <p style={{ color: C.light, fontSize: 12, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
+                  <p style={{ color: C.light, fontSize: 14, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
                 </div>
               ))}
             </div>
@@ -2206,10 +2293,10 @@ export default function App() {
             <Heading sub="A working hypothesis to explain unexplained extremes — not a confirmed fact">Unexplained Extremes: A Structural Reorganisation Hypothesis</Heading>
             <div style={{ background: `${C.orange}0C`, border: `1.5px solid ${C.orange}35`, borderRadius: 12, padding: "20px 24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                <span style={{ background: `${C.orange}25`, color: C.orange, fontSize: 9, fontWeight: 800, padding: "3px 9px", borderRadius: 4, letterSpacing: 1, textTransform: "uppercase" }}>Working Hypothesis</span>
+                <span style={{ background: `${C.orange}25`, color: C.orange, fontSize: 11, fontWeight: 800, padding: "3px 9px", borderRadius: 4, letterSpacing: 1, textTransform: "uppercase" }}>Working Hypothesis</span>
                 <span style={{ color: C.white, fontSize: 15, fontWeight: 700 }}>Some extreme revenue changes may reflect M&A or major capital restructurings</span>
               </div>
-              <p style={{ color: C.light, fontSize: 12, lineHeight: 1.75, margin: "0 0 16px" }}>
+              <p style={{ color: C.light, fontSize: 14, lineHeight: 1.75, margin: "0 0 16px" }}>
                 After accounting for size effects, COVID shocks, and sector dynamics, a small subset of companies still shows simultaneous extreme revenue changes (&gt;500%) alongside unusual equity and asset movements. We cannot confirm these are M&A events — the dataset contains no such label. However, the co-occurrence of four indirect financial signals is too consistent to dismiss as noise.
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
@@ -2222,7 +2309,7 @@ export default function App() {
                   <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
                       <span style={{ fontSize: 15 }}>{s.icon}</span>
-                      <span style={{ color: C.orange, fontSize: 11, fontWeight: 700 }}>{s.signal}</span>
+                      <span style={{ color: C.orange, fontSize: 13, fontWeight: 700 }}>{s.signal}</span>
                     </div>
                     <p style={{ color: C.muted, fontSize: 10.5, lineHeight: 1.5, margin: 0 }}>{s.desc}</p>
                   </div>
@@ -2230,19 +2317,19 @@ export default function App() {
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px" }}>
-                  <p style={{ color: C.white, fontSize: 11, fontWeight: 700, margin: "0 0 5px" }}>Confidence Scoring Logic</p>
+                  <p style={{ color: C.white, fontSize: 13, fontWeight: 700, margin: "0 0 5px" }}>Confidence Scoring Logic</p>
                   <p style={{ color: C.muted, fontSize: 10.5, lineHeight: 1.55, margin: 0 }}>
                     Each company-year receives 1 point per signal present. A score ≥ 4 out of 4 triggers <code style={{ color: C.orange }}>ma_event_proxy_flag = 1</code>. This conservative threshold minimises false positives — only observations where all four signals align simultaneously are flagged.
                   </p>
                 </div>
                 <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px" }}>
-                  <p style={{ color: C.white, fontSize: 11, fontWeight: 700, margin: "0 0 5px" }}>How We Use It — With Caveats</p>
+                  <p style={{ color: C.white, fontSize: 13, fontWeight: 700, margin: "0 0 5px" }}>How We Use It — With Caveats</p>
                   <p style={{ color: C.muted, fontSize: 10.5, lineHeight: 1.55, margin: 0 }}>
                     The flag is used as a feature, not as ground truth. We do not claim to have identified M&A events — we claim these observations behave differently and the model should know that. If the hypothesis is wrong, the flag still captures "structurally unusual years" which carry predictive value regardless of the true cause.
                   </p>
                 </div>
               </div>
-              <p style={{ color: C.orange, fontSize: 10, fontWeight: 600, margin: "14px 0 0", fontStyle: "italic" }}>
+              <p style={{ color: C.orange, fontSize: 12, fontWeight: 600, margin: "14px 0 0", fontStyle: "italic" }}>
                 → This hypothesis motivates the <code style={{ color: C.orange }}>ma_event_proxy_flag</code> and <code style={{ color: C.orange }}>ma_confidence_score</code> features built in the Feature Engineering section.
               </p>
             </div>
@@ -2255,7 +2342,7 @@ export default function App() {
             <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
               Feature Engineering
             </h2>
-            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 20px" }}>
+            <p style={{ color: C.muted, fontSize: 14, margin: "0 0 20px" }}>
               From raw financial statements to model-ready features — 162 engineered features across 19 categories, reduced to 27 final features via consensus permutation importance
             </p>
 
@@ -2269,7 +2356,7 @@ export default function App() {
               ].map((s, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 8, padding: "12px 20px", textAlign: "center", flex: "1 1 120px" }}>
                   <div style={{ color: s.color, fontSize: 26, fontWeight: 800, lineHeight: 1 }}>{s.value}</div>
-                  <div style={{ color: C.muted, fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 4 }}>{s.label}</div>
+                  <div style={{ color: C.muted, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 4 }}>{s.label}</div>
                 </div>
               ))}
             </div>
@@ -2289,12 +2376,12 @@ export default function App() {
               ].map((f, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${f.color}`, borderRadius: 8, padding: "14px 16px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <code style={{ color: f.color, fontSize: 12, fontWeight: 700 }}>{f.name}</code>
-                    <span style={{ background: `${f.color}20`, color: f.color, fontSize: 8, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: 0.5 }}>{f.type}</span>
-                    <span style={{ marginLeft: "auto", color: C.muted, fontSize: 9, fontWeight: 600 }}>{f.count} features</span>
+                    <code style={{ color: f.color, fontSize: 14, fontWeight: 700 }}>{f.name}</code>
+                    <span style={{ background: `${f.color}20`, color: f.color, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: 0.5 }}>{f.type}</span>
+                    <span style={{ marginLeft: "auto", color: C.muted, fontSize: 11, fontWeight: 600 }}>{f.count} features</span>
                   </div>
-                  <p style={{ color: C.muted, fontSize: 10, fontFamily: "monospace", margin: "0 0 6px", lineHeight: 1.4 }}>{f.desc}</p>
-                  <p style={{ color: C.light, fontSize: 11, lineHeight: 1.5, margin: 0 }}>{f.body}</p>
+                  <p style={{ color: C.muted, fontSize: 12, fontFamily: "monospace", margin: "0 0 6px", lineHeight: 1.4 }}>{f.desc}</p>
+                  <p style={{ color: C.light, fontSize: 13, lineHeight: 1.5, margin: 0 }}>{f.body}</p>
                 </div>
               ))}
             </div>
@@ -2303,7 +2390,7 @@ export default function App() {
             <Heading sub="How missing values are identified and treated">Handling Missingness</Heading>
             <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Card>
-                <p style={{ color: C.accent, fontSize: 10, fontWeight: 700, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 1 }}>Numeric Features</p>
+                <p style={{ color: C.accent, fontSize: 12, fontWeight: 700, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 1 }}>Numeric Features</p>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   {[
                     { feature: "Monetary columns", strategy: "Median per fiscal year", reason: "Right-skewed; median robust to outliers" },
@@ -2312,15 +2399,15 @@ export default function App() {
                     { feature: "Target (revenue_change_next)", strategy: "Row excluded from training", reason: "No future info available — not imputable" },
                   ].map((r, i) => (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <td style={{ padding: "6px 8px", color: C.light, fontSize: 10 }}>{r.feature}</td>
-                      <td style={{ padding: "6px 8px", color: C.accent, fontSize: 10, fontWeight: 600 }}>{r.strategy}</td>
+                      <td style={{ padding: "6px 8px", color: C.light, fontSize: 12 }}>{r.feature}</td>
+                      <td style={{ padding: "6px 8px", color: C.accent, fontSize: 12, fontWeight: 600 }}>{r.strategy}</td>
                     </tr>
                   ))}
                 </table>
-                <p style={{ color: C.muted, fontSize: 9.5, margin: "8px 0 0" }}>All imputers fitted on training data only — applied to validation/test to avoid leakage</p>
+                <p style={{ color: C.muted, fontSize: 11, margin: "8px 0 0" }}>All imputers fitted on training data only — applied to validation/test to avoid leakage</p>
               </Card>
               <Card>
-                <p style={{ color: C.blue, fontSize: 10, fontWeight: 700, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 1 }}>Categorical Features</p>
+                <p style={{ color: C.blue, fontSize: 12, fontWeight: 700, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 1 }}>Categorical Features</p>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   {[
                     { feature: "legal_form", strategy: "One-Hot Encoding", reason: "Low cardinality (6 classes), no ordinal order" },
@@ -2329,12 +2416,12 @@ export default function App() {
                     { feature: "fiscal_year", strategy: "Integer feature + year dummies", reason: "Captures temporal trend and COVID fixed effect" },
                   ].map((r, i) => (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <td style={{ padding: "6px 8px", color: C.light, fontSize: 10 }}>{r.feature}</td>
-                      <td style={{ padding: "6px 8px", color: C.blue, fontSize: 10, fontWeight: 600 }}>{r.strategy}</td>
+                      <td style={{ padding: "6px 8px", color: C.light, fontSize: 12 }}>{r.feature}</td>
+                      <td style={{ padding: "6px 8px", color: C.blue, fontSize: 12, fontWeight: 600 }}>{r.strategy}</td>
                     </tr>
                   ))}
                 </table>
-                <p style={{ color: C.muted, fontSize: 9.5, margin: "8px 0 0" }}>Target encoding computed on training fold only to prevent leakage into validation</p>
+                <p style={{ color: C.muted, fontSize: 11, margin: "8px 0 0" }}>Target encoding computed on training fold only to prevent leakage into validation</p>
               </Card>
             </div>
 
@@ -2349,23 +2436,23 @@ export default function App() {
               ].map((t, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${t.color}`, borderRadius: 8, padding: "14px 16px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: "50%", background: t.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: C.bg }}>{t.num}</div>
-                    <span style={{ color: C.white, fontSize: 13, fontWeight: 700 }}>{t.title}</span>
+                    <div style={{ width: 24, height: 24, borderRadius: "50%", background: t.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: C.bg }}>{t.num}</div>
+                    <span style={{ color: C.white, fontSize: 15, fontWeight: 700 }}>{t.title}</span>
                   </div>
-                  <p style={{ color: C.light, fontSize: 11, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
+                  <p style={{ color: C.light, fontSize: 13, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
                 </div>
               ))}
             </div>
 
             {/* Final selected features strip */}
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", marginTop: 4 }}>
-              <p style={{ color: C.accent, fontSize: 10, fontWeight: 700, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 1 }}>27 Final Model Features (ranked by permutation importance)</p>
+              <p style={{ color: C.accent, fontSize: 12, fontWeight: 700, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 1 }}>27 Final Model Features (ranked by permutation importance)</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {["production_value","legal_form","log_total_assets","current_assets","legal_form_encoded","total_fixed_assets","asset_turnover","net_debt","financial_income","financial_burden","capital_intensity","operating_income","working_capital","operating_margin","revenue_change","asset_turnover_vs_sector","total_fixed_assets_lag1","equity_gap_pct_assets","fixed_asset_turnover","equity_gap","ateco_sector","asset_turnover_lag1","working_capital_to_assets","financial_income_lag1","age_x_size_tier","current_ratio","log_total_assets_lag1"].map((feat, i) => (
-                  <span key={i} style={{ background: i < 5 ? `${C.gold}22` : `${C.accent}12`, border: `1px solid ${i < 5 ? C.gold : C.border}`, color: i < 5 ? C.gold : C.light, fontSize: 9.5, fontWeight: i < 5 ? 700 : 500, padding: "3px 8px", borderRadius: 4, fontFamily: "monospace" }}>{feat}</span>
+                  <span key={i} style={{ background: i < 5 ? `${C.gold}22` : `${C.accent}12`, border: `1px solid ${i < 5 ? C.gold : C.border}`, color: i < 5 ? C.gold : C.light, fontSize: 11, fontWeight: i < 5 ? 700 : 500, padding: "3px 8px", borderRadius: 4, fontFamily: "monospace" }}>{feat}</span>
                 ))}
               </div>
-              <p style={{ color: C.muted, fontSize: 9, margin: "8px 0 0" }}>Gold highlight = top-5 by permutation importance · 83% reduction from 162 candidates</p>
+              <p style={{ color: C.muted, fontSize: 11, margin: "8px 0 0" }}>Gold highlight = top-5 by permutation importance · 83% reduction from 162 candidates</p>
             </div>
           </>
         )}
@@ -2376,7 +2463,7 @@ export default function App() {
             <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
               What's Next — From EDA to Model
             </h2>
-            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 20px" }}>
+            <p style={{ color: C.muted, fontSize: 14, margin: "0 0 20px" }}>
               The road ahead: how we will conquer the hardest parts of this forecasting challenge
             </p>
 
@@ -2399,15 +2486,15 @@ export default function App() {
                   const roleColor = { "Train": C.blue, "Validation": C.gold, "Holdout": C.purple, "Test (blind)": C.coral };
                   return (
                     <div key={fi} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ color: C.white, fontSize: 13, fontWeight: 700, minWidth: 58 }}>{fold.label}</span>
+                      <span style={{ color: C.white, fontSize: 15, fontWeight: 700, minWidth: 58 }}>{fold.label}</span>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {fold.blocks.map((b, bi) => (
                           <div key={bi} style={{
                             background: `${roleColor[b.role]}30`, border: `2px solid ${roleColor[b.role]}`,
                             borderRadius: 8, padding: "10px 18px", textAlign: "center", minWidth: 68,
                           }}>
-                            <div style={{ color: C.white, fontSize: 13, fontWeight: 700 }}>{b.yr}</div>
-                            <div style={{ color: roleColor[b.role], fontSize: 9, fontWeight: 600, marginTop: 3 }}>{b.role}</div>
+                            <div style={{ color: C.white, fontSize: 15, fontWeight: 700 }}>{b.yr}</div>
+                            <div style={{ color: roleColor[b.role], fontSize: 11, fontWeight: 600, marginTop: 3 }}>{b.role}</div>
                           </div>
                         ))}
                       </div>
@@ -2419,7 +2506,7 @@ export default function App() {
                 {[["Train", C.blue], ["Validation", C.gold], ["Holdout", C.purple], ["Test (blind)", C.coral]].map(([label, color]) => (
                   <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{ width: 14, height: 14, borderRadius: 3, background: color }} />
-                    <span style={{ color: C.light, fontSize: 10 }}>{label}</span>
+                    <span style={{ color: C.light, fontSize: 12 }}>{label}</span>
                   </div>
                 ))}
               </div>
@@ -2436,17 +2523,17 @@ export default function App() {
               ].map((m, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `3px solid ${m.color}`, borderRadius: 8, padding: "14px 16px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <span style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>{m.name}</span>
-                    <span style={{ background: `${m.color}25`, color: m.color, fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 4 }}>{m.tag}</span>
+                    <span style={{ color: C.white, fontSize: 16, fontWeight: 700 }}>{m.name}</span>
+                    <span style={{ background: `${m.color}25`, color: m.color, fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 4 }}>{m.tag}</span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     <div>
-                      <p style={{ color: C.accent, fontSize: 9, fontWeight: 700, margin: "0 0 4px", textTransform: "uppercase" }}>Strengths</p>
-                      {m.pros.map((p, pi) => <p key={pi} style={{ color: C.light, fontSize: 10, margin: "0 0 3px", lineHeight: 1.4 }}>✓ {p}</p>)}
+                      <p style={{ color: C.accent, fontSize: 11, fontWeight: 700, margin: "0 0 4px", textTransform: "uppercase" }}>Strengths</p>
+                      {m.pros.map((p, pi) => <p key={pi} style={{ color: C.light, fontSize: 12, margin: "0 0 3px", lineHeight: 1.4 }}>✓ {p}</p>)}
                     </div>
                     <div>
-                      <p style={{ color: C.coral, fontSize: 9, fontWeight: 700, margin: "0 0 4px", textTransform: "uppercase" }}>Challenges</p>
-                      {m.cons.map((c, ci) => <p key={ci} style={{ color: C.muted, fontSize: 10, margin: "0 0 3px", lineHeight: 1.4 }}>✗ {c}</p>)}
+                      <p style={{ color: C.coral, fontSize: 11, fontWeight: 700, margin: "0 0 4px", textTransform: "uppercase" }}>Challenges</p>
+                      {m.cons.map((c, ci) => <p key={ci} style={{ color: C.muted, fontSize: 12, margin: "0 0 3px", lineHeight: 1.4 }}>✗ {c}</p>)}
                     </div>
                   </div>
                 </div>
@@ -2456,7 +2543,7 @@ export default function App() {
             {/* Feature selection recap in next steps */}
             <Heading sub="Why we start with 162 features and cut to 27 — and how that decision is made">Feature Selection in the Model Pipeline</Heading>
             <Card>
-              <p style={{ color: C.light, fontSize: 12, lineHeight: 1.7, margin: "0 0 14px" }}>
+              <p style={{ color: C.light, fontSize: 14, lineHeight: 1.7, margin: "0 0 14px" }}>
                 After engineering 162 candidates across 19 categories, we apply <strong style={{ color: C.gold }}>consensus permutation importance</strong> to select the 27 features that enter the final model. The process runs inside each cross-validation fold — avoiding any selection leakage — and requires a feature to matter in <em>both</em> time-series folds before it is trusted.
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
@@ -2466,13 +2553,13 @@ export default function App() {
                   { step: "Step 3", color: C.blue, label: "Consensus → 27 final", detail: "Features in both folds form the consensus set; backfill from importance ranking if < 20" },
                 ].map((s, i) => (
                   <div key={i} style={{ background: `${s.color}0E`, border: `1px solid ${s.color}30`, borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ color: s.color, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{s.step}</div>
-                    <div style={{ color: C.white, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>{s.label}</div>
-                    <div style={{ color: C.muted, fontSize: 10, lineHeight: 1.45 }}>{s.detail}</div>
+                    <div style={{ color: s.color, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{s.step}</div>
+                    <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.45 }}>{s.detail}</div>
                   </div>
                 ))}
               </div>
-              <p style={{ color: C.muted, fontSize: 10, margin: "12px 0 0", lineHeight: 1.6 }}>
+              <p style={{ color: C.muted, fontSize: 12, margin: "12px 0 0", lineHeight: 1.6 }}>
                 Why not SHAP or mutual information? Permutation importance is model-aware and evaluated on held-out validation folds — it measures <em>actual predictive value</em>, not just correlation with the target. Features like <code style={{ color: C.gold }}>equity_gap_pct_assets</code> and <code style={{ color: C.gold }}>age_x_size_tier</code> rank poorly on Pearson r but survive fold-wise selection, confirming their non-linear signal.
               </p>
             </Card>
@@ -2489,18 +2576,18 @@ export default function App() {
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${t.color}`, borderRadius: 8, padding: "16px 18px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 18 }}>{t.icon}</span>
-                    <span style={{ color: C.white, fontSize: 13, fontWeight: 700 }}>{t.title}</span>
+                    <span style={{ color: C.white, fontSize: 15, fontWeight: 700 }}>{t.title}</span>
                   </div>
-                  <p style={{ color: C.light, fontSize: 11, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
+                  <p style={{ color: C.light, fontSize: 13, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
                 </div>
               ))}
             </div>
 
             <div style={{ background: `${C.accent}0F`, border: `1px solid ${C.accent}30`, borderRadius: 10, padding: "18px 22px", marginTop: 8 }}>
-              <p style={{ color: C.accent, fontSize: 14, fontWeight: 700, margin: "0 0 8px", fontFamily: "'Playfair Display', Georgia, serif" }}>
+              <p style={{ color: C.accent, fontSize: 16, fontWeight: 700, margin: "0 0 8px", fontFamily: "'Playfair Display', Georgia, serif" }}>
                 Our Commitment
               </p>
-              <p style={{ color: C.light, fontSize: 12, lineHeight: 1.7, margin: 0 }}>
+              <p style={{ color: C.light, fontSize: 14, lineHeight: 1.7, margin: 0 }}>
                 The signal is weak, the distribution is wild, and the tails are real — but that is exactly what makes this challenge interesting.
                 We have built a rigorous EDA foundation, identified the structural drivers, engineered meaningful features, and designed a leakage-proof validation strategy.
                 The next phase is model development, hyperparameter optimisation, SHAP interpretation, and final evaluation.
@@ -2511,8 +2598,8 @@ export default function App() {
         )}
 
         <div style={{ marginTop: 36, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
-          <p style={{ color: C.muted, fontSize: 9.5, margin: 0 }}>ExpertAI Challenge 3</p>
-          <p style={{ color: C.muted, fontSize: 9.5, margin: 0 }}>Source: train_data.csv  •  Training data only — no data leakage</p>
+          <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>ExpertAI Challenge 3</p>
+          <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>Source: train_data.csv  •  Training data only — no data leakage</p>
         </div>
       </div>
     </div>
