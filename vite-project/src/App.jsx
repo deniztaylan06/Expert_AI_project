@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import {
   BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -446,7 +447,6 @@ function computeMissingnessData(rows) {
     { key: "leverage",            label: "Leverage",            group: "Ratios" },
     { key: "current_ratio",       label: "Current Ratio",       group: "Ratios" },
     { key: "debt_to_assets",      label: "Debt / Assets",       group: "Ratios" },
-    { key: "province",            label: "Province",            group: "Company Info" },
     { key: "years_in_business",   label: "Years in Business",   group: "Company Info" },
     { key: "revenue_change",      label: "Revenue Change",      group: "Target" },
   ];
@@ -834,7 +834,7 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
       >
         Company Size Analysis — Production Value Distribution
       </Heading>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
 
         {/* Quantile table */}
         <Card>
@@ -940,7 +940,7 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
       </Card>
 
       {/* ── SECTION 4: Sector (Enhanced ComposedChart) + Region ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div>
           <Heading
             sub="Median next-year revenue change by sector — sorted by performance, ghost bar shows relative company count"
@@ -1024,7 +1024,7 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
       </div>
 
       {/* ── SECTION 5: Legal Form Table ── */}
-      <Heading sub="Revenue profile and predicted change by company legal structure" insight="SPA (large corps) trend negative; SRL/SNC (smaller) show growth — mirrors the size effect">Legal Form → Revenue Target</Heading>
+      <Heading sub="Revenue profile and predicted change by company legal structure" insight="Legal form correlates with company size — interpret with caution, as the patterns here largely reflect the size effect rather than legal structure itself">Legal Form → Revenue Target</Heading>
       <Card>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -1586,7 +1586,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <KPI label="Unique Companies"   value={uniqueCompanies.toLocaleString()} sub="Distinct entities"          color={C.accent} />
           <KPI label="Total Observations" value={totalRows.toLocaleString()}        sub="Company–year rows (3 yrs)"  color={C.blue}   />
-          <KPI label="Features"           value="30+"                               sub="Financial & structural"     color={C.gold}   />
+          <KPI label="Raw Features"         value="30+"                               sub="Financial & structural"     color={C.gold}   />
           <KPI label="Fiscal Years"       value="2018–2021"                         sub="4 years of statements"      color={C.purple} />
         </div>
       </div>
@@ -1681,7 +1681,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
         Years in Business vs. Next-Year Revenue Change
       </Heading>
       <Card>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <div className="grid-3col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           {[2018, 2019, 2020].map((yr, yi) => {
             const pts = scatterByYear?.[yr] ?? [];
             const clr = [C.blue, C.accent, C.gold][yi];
@@ -1953,7 +1953,7 @@ export default function App() {
             </Card>
 
             {/* ── 3 + 4: Tier Persistence & Extreme Events ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
                 <Heading
                   sub="% of companies that stayed in the same tier the following year — by starting tier"
@@ -2016,7 +2016,7 @@ export default function App() {
             </div>
 
             {/* ── 5 + 6: Growth Momentum & Equity Gap ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
                 <Heading
                   sub="Median next-year revenue change by current-year revenue change bucket — mean reversion pattern"
@@ -2102,7 +2102,7 @@ export default function App() {
 
             {/* ── 7. Insight Cards ── */}
             <Heading>How These Signals Improve Our Revenue Model</Heading>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
                 {
                   num: "1", color: C.accent,
@@ -2231,7 +2231,7 @@ export default function App() {
             {/* Quantile Comparison Across Years */}
             <Heading sub="Side-by-side percentile comparison across years" insight="Q25 stays near −68% every year, Q75 near +240% — the spread is structurally stable, only the center shifts">Quantile Comparison Across Years</Heading>
             <Card>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <div className="grid-3col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                 {[2018, 2019, 2020].map((yr, yi) => {
                   const d = yearsData[yr];
                   const clr = [C.accent, C.blue, C.gold][yi];
@@ -2337,7 +2337,7 @@ export default function App() {
 
             {/* Strategic Takeaways */}
             <Heading>Key Strategic Takeaways for Revenue Forecasting</Heading>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
                 { num: "1", title: "Size Drives Everything", body: "Small companies (<€100M) show explosive median growth; large companies (>€10B) trend deeply negative. This funnel pattern is consistent across all 3 years. Company revenue tier must be a primary model feature.", color: C.accent },
                 { num: "2", title: "Extreme Tails Are Structural", body: "~35% of companies have >100% revenue change. These are real events — expansions, closures, or potentially structural reorganisations. The IQR stays ~300pp every year. Standard RMSE will be dominated by these tails without explicit handling.", color: C.coral },
@@ -2364,7 +2364,7 @@ export default function App() {
               <p style={{ color: C.light, fontSize: 14, lineHeight: 1.75, margin: "0 0 16px" }}>
                 After accounting for size effects, COVID shocks, and sector dynamics, a small subset of companies still shows simultaneous extreme revenue changes (&gt;500%) alongside unusual equity and asset movements. We cannot confirm these are M&A events — the dataset contains no such label. However, the co-occurrence of four indirect financial signals is too consistent to dismiss as noise.
               </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+              <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
                 {[
                   { signal: "Equity Shock", desc: "Shareholders' equity changes by more than what net profit alone explains — suggesting external capital injection or withdrawal", icon: "⚡" },
                   { signal: "Asset Jump", desc: "Total fixed assets increase sharply year-over-year without proportional capex — consistent with asset acquisition from a merger", icon: "📈" },
@@ -2408,7 +2408,7 @@ export default function App() {
               Feature Engineering
             </h2>
             <p style={{ color: C.muted, fontSize: 14, margin: "0 0 20px" }}>
-              From raw financial statements to model-ready features — 162 engineered features across 19 categories, reduced to 27 final features via consensus permutation importance
+              From raw financial statements to model-ready features — 162 engineered features across 19 categories. Feature selection will be applied in the modeling phase.
             </p>
 
             {/* Feature count summary */}
@@ -2416,8 +2416,6 @@ export default function App() {
               {[
                 { label: "Total Features", value: "162", color: C.accent },
                 { label: "Feature Categories", value: "19", color: C.gold },
-                { label: "Final Model Features", value: "27", color: C.blue },
-                { label: "Reduction", value: "83%", color: C.purple },
               ].map((s, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 8, padding: "12px 20px", textAlign: "center", flex: "1 1 120px" }}>
                   <div style={{ color: s.color, fontSize: 26, fontWeight: 800, lineHeight: 1 }}>{s.value}</div>
@@ -2430,14 +2428,14 @@ export default function App() {
             <Heading sub="19 categories of engineered features — key examples from each group">Feature Categories</Heading>
             <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
-                { name: "Momentum & Lag Features", count: "14", type: "Temporal", color: C.accent, desc: "revenue_change, rev_growth_lag1/lag2, rev_growth_accel, rev_growth_avg2, operating_margin_lag1/lag2…", body: "1- and 2-year lags of key financial metrics. Acceleration (lag1 − lag2) captures whether growth is accelerating or decelerating — a top-5 predictor of next-year revenue." },
-                { name: "Financial Ratios", count: "10", type: "Ratio", color: C.gold, desc: "operating_margin, profit_margin, cost_intensity, asset_turnover, fixed_asset_turnover, capital_intensity…", body: "Profitability and efficiency ratios normalise for company size. Asset turnover (PV / total_assets) ranks as the 3rd most important final feature by permutation importance." },
-                { name: "Equity Gap", count: "6", type: "Capital Signal", color: C.purple, desc: "equity_gap = SE_t − SE_{t−1} − net_profit; equity_gap_pct_assets; equity_shock_flag…", body: "Detects hidden capital injections or withdrawals invisible in the P&L. Positive gap = shareholder injection → strategic commitment signal. Enters the final 27-feature model." },
+                { name: "Momentum & Lag Features", count: "14", type: "Temporal", color: C.accent, desc: "revenue_change, rev_growth_lag1/lag2, rev_growth_accel, rev_growth_avg2, operating_margin_lag1/lag2…", body: "1- and 2-year lags of key financial metrics. Acceleration (lag1 − lag2) captures whether growth is accelerating or decelerating — expected to be among the most informative features." },
+                { name: "Financial Ratios", count: "10", type: "Ratio", color: C.gold, desc: "operating_margin, profit_margin, cost_intensity, asset_turnover, fixed_asset_turnover, capital_intensity…", body: "Profitability and efficiency ratios normalise for company size. Asset turnover (PV / total_assets) directly captures how efficiently companies convert assets into revenue." },
+                { name: "Equity Gap", count: "6", type: "Capital Signal", color: C.purple, desc: "equity_gap = SE_t − SE_{t−1} − net_profit; equity_gap_pct_assets; equity_shock_flag…", body: "Detects hidden capital injections or withdrawals invisible in the P&L. Positive gap = shareholder injection → strategic commitment signal with potential predictive value." },
                 { name: "Leverage & Solvency", count: "12", type: "Ratio", color: C.coral, desc: "leverage_change, debt_mix_short/long, debt_to_assets_change, current_ratio_change…", body: "YoY changes in leverage and debt structure differentiate growth-investment borrowing from distress. Winsorised at P1/P99 to handle near-zero equity denominators." },
-                { name: "Tier / Size Regime", count: "7", type: "Rank", color: C.blue, desc: "revenue_tier (decile 1–10), tier_shift, tier_extreme_growth_flag, tier_relative_growth…", body: "Non-linear size encoding via annual decile rank — avoids dominance by large firms. Tier shift (movement up/down) is a strong momentum signal and part of the final model." },
+                { name: "Tier / Size Regime", count: "7", type: "Rank", color: C.blue, desc: "revenue_tier (decile 1–10), tier_shift, tier_extreme_growth_flag, tier_relative_growth…", body: "Non-linear size encoding via annual decile rank — avoids dominance by large firms. EDA confirms tier shift (movement up/down) correlates with next-year revenue direction." },
                 { name: "Peer & Sector Benchmarks", count: "12", type: "Relative", color: C.teal, desc: "revenue_change_vs_sector, profit_margin_vs_sector, asset_turnover_vs_sector, growth_vs_peers…", body: "Prior-year sector/region medians (computed on training data only) enable comparison against peers. Companies outperforming their sector median tend to sustain that outperformance." },
-                { name: "Binary Event Flags", count: "26", type: "Event", color: C.orange, desc: "high_growth_flag, extreme_decline_flag, equity_shock_flag, ma_event_proxy_flag, covid_dummy…", body: "Regime indicators for structural breaks — M&A proxies (composite confidence score ≥ 4), COVID period dummies (2020–21), and extreme-event flags prevent outlier contamination." },
-                { name: "Interaction & Log Features", count: "18", type: "Composite", color: "#F472B6", desc: "tier_shift_x_profit_margin, age_x_size_tier, log_total_assets, log_production_value_lag1…", body: "Cross-terms (size × sector growth, legal form × volatility) and log transforms of skewed monetary variables. age_x_size_tier enters the final 27-feature model." },
+                { name: "Binary Event Flags", count: "26", type: "Event", color: C.orange, desc: "high_growth_flag, extreme_decline_flag, equity_shock_flag, ma_event_proxy_flag, covid_dummy…", body: "Regime indicators for structural breaks — M&A proxies (composite confidence score ≥ 4), COVID period dummies (2020–21), and extreme-event flags to help the model distinguish noise from real events." },
+                { name: "Interaction & Log Features", count: "18", type: "Composite", color: "#F472B6", desc: "tier_shift_x_profit_margin, age_x_size_tier, log_total_assets, log_production_value_lag1…", body: "Cross-terms (size × sector growth, legal form × volatility) and log transforms of skewed monetary variables. These capture non-linear relationships that linear correlations miss." },
               ].map((f, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${f.color}`, borderRadius: 8, padding: "14px 16px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -2490,34 +2488,12 @@ export default function App() {
               </Card>
             </div>
 
-            {/* Feature Selection */}
-            <Heading sub="How 162 candidates are reduced to 27 final features — consensus permutation importance">Feature Selection: From 162 → 27</Heading>
-            <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {[
-                { num: "1", color: C.accent, title: "Fold-wise Permutation Importance", body: "Time-series cross-validation (2 folds). In each fold: fit XGBoost, permute each feature and measure RMSE increase. Features with highest average RMSE degradation are most important. Target K per fold ≈ 35." },
-                { num: "2", color: C.gold, title: "Consensus Aggregation", body: "Features selected in both folds (frequency ≥ 2) form the 'consensus set'. If consensus < 20 features, backfill from average permutation importance ranking across folds to ensure coverage." },
-                { num: "3", color: C.purple, title: "Final 27 Selected Features", body: "Top features from consensus set. Top-5 by importance: production_value (137), legal_form (94), log_total_assets (76), current_assets (60), legal_form_encoded (58). equity_gap, asset_turnover, age_x_size_tier all included." },
-                { num: "4", color: C.blue, title: "Validation on Holdout", body: "Final 27 features evaluated on held-out 2022–23 data. Selection metrics: RMSE, MAPE, directional accuracy, tail MAE (high-growth/decline). Directional accuracy weighted equally with magnitude error." },
-              ].map((t, i) => (
-                <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${t.color}`, borderRadius: 8, padding: "14px 16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: "50%", background: t.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: C.bg }}>{t.num}</div>
-                    <span style={{ color: C.white, fontSize: 15, fontWeight: 700 }}>{t.title}</span>
-                  </div>
-                  <p style={{ color: C.light, fontSize: 13, lineHeight: 1.55, margin: 0 }}>{t.body}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Final selected features strip */}
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", marginTop: 4 }}>
-              <p style={{ color: C.accent, fontSize: 12, fontWeight: 700, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 1 }}>27 Final Model Features (ranked by permutation importance)</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {["production_value","legal_form","log_total_assets","current_assets","legal_form_encoded","total_fixed_assets","asset_turnover","net_debt","financial_income","financial_burden","capital_intensity","operating_income","working_capital","operating_margin","revenue_change","asset_turnover_vs_sector","total_fixed_assets_lag1","equity_gap_pct_assets","fixed_asset_turnover","equity_gap","ateco_sector","asset_turnover_lag1","working_capital_to_assets","financial_income_lag1","age_x_size_tier","current_ratio","log_total_assets_lag1"].map((feat, i) => (
-                  <span key={i} style={{ background: i < 5 ? `${C.gold}22` : `${C.accent}12`, border: `1px solid ${i < 5 ? C.gold : C.border}`, color: i < 5 ? C.gold : C.light, fontSize: 11, fontWeight: i < 5 ? 700 : 500, padding: "3px 8px", borderRadius: 4, fontFamily: "monospace" }}>{feat}</span>
-                ))}
-              </div>
-              <p style={{ color: C.muted, fontSize: 11, margin: "8px 0 0" }}>Gold highlight = top-5 by permutation importance · 83% reduction from 162 candidates</p>
+            {/* Feature Selection — bridge to What's Next */}
+            <div style={{ background: `${C.gold}09`, border: `1px solid ${C.gold}22`, borderLeft: `4px solid ${C.gold}`, borderRadius: 10, padding: "14px 18px", marginTop: 8 }}>
+              <p style={{ color: C.gold, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 5px" }}>Next Step — Feature Selection</p>
+              <p style={{ color: C.light, fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+                With 162 candidates across 19 categories, the next phase is model training followed by <b style={{ color: C.gold }}>consensus permutation importance</b> to determine which features genuinely improve RMSE across both CV folds. The final feature count will be decided after training — not before. See the <b style={{ color: C.white }}>What's Next</b> tab for the full selection methodology.
+              </p>
             </div>
           </>
         )}
@@ -2533,7 +2509,7 @@ export default function App() {
             </p>
 
             {/* Cross-validation strategy illustration */}
-            <Heading sub="Time-aware split — no future information ever reaches the past">Cross-Validation Strategy</Heading>
+            <Heading sub="Time-aware split — no future information ever reaches the past">1. Cross-Validation Strategy</Heading>
             <Card>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {[
@@ -2577,8 +2553,32 @@ export default function App() {
               </div>
             </Card>
 
+            {/* Feature Selection */}
+            <Heading sub="How we reduce 162 candidates to a final model-ready set — consensus permutation importance">2. Feature Selection</Heading>
+            <Card>
+              <p style={{ color: C.light, fontSize: 14, lineHeight: 1.7, margin: "0 0 14px" }}>
+                With 162 candidate features across 19 categories, we will apply <strong style={{ color: C.gold }}>consensus permutation importance</strong> to select only the features that prove genuinely useful across both CV folds — preventing selection leakage and avoiding overfitting to any single time period.
+              </p>
+              <div className="grid-3col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {[
+                  { step: "Step 1", color: C.accent, label: "Fold-wise importance", detail: "Permute each feature in each CV fold; rank by RMSE degradation. Target: top ~35 per fold." },
+                  { step: "Step 2", color: C.gold, label: "Consensus set", detail: "Keep only features that appear in both folds. Backfill from ranking if consensus set < 20." },
+                  { step: "Step 3", color: C.blue, label: "Final selection", detail: "Features in the consensus set enter the model. Count determined after training — not before." },
+                ].map((s, i) => (
+                  <div key={i} style={{ background: `${s.color}0E`, border: `1px solid ${s.color}30`, borderRadius: 8, padding: "10px 12px" }}>
+                    <div style={{ color: s.color, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{s.step}</div>
+                    <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.45 }}>{s.detail}</div>
+                  </div>
+                ))}
+              </div>
+              <p style={{ color: C.muted, fontSize: 12, margin: "12px 0 0", lineHeight: 1.6 }}>
+                Why permutation importance over SHAP or mutual information? It is model-aware and evaluated on held-out data — it measures <em>actual predictive value</em>, not just linear correlation. Features like <code style={{ color: C.gold }}>equity_gap_pct_assets</code> and <code style={{ color: C.gold }}>age_x_size_tier</code> rank poorly on Pearson r but may carry strong non-linear signal that only emerges after model training.
+              </p>
+            </Card>
+
             {/* Model pipeline */}
-            <Heading sub="Models we will train and compare">Planned Model Pipeline</Heading>
+            <Heading sub="Models we will train and compare">3. Planned Model Pipeline</Heading>
             <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
                 { name: "Ridge Regression", color: C.blue, tag: "Baseline", pros: ["Interpretable coefficients", "Fast to train", "L2 regularisation handles multicollinearity"], cons: ["Linear only — misses tier non-linearities", "Sensitive to outlier scale"] },
@@ -2604,30 +2604,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-
-            {/* Feature selection recap in next steps */}
-            <Heading sub="Why we start with 162 features and cut to 27 — and how that decision is made">Feature Selection in the Model Pipeline</Heading>
-            <Card>
-              <p style={{ color: C.light, fontSize: 14, lineHeight: 1.7, margin: "0 0 14px" }}>
-                After engineering 162 candidates across 19 categories, we apply <strong style={{ color: C.gold }}>consensus permutation importance</strong> to select the 27 features that enter the final model. The process runs inside each cross-validation fold — avoiding any selection leakage — and requires a feature to matter in <em>both</em> time-series folds before it is trusted.
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                {[
-                  { step: "Step 1", color: C.accent, label: "Generate 162 features", detail: "Lags, ratios, equity gap, tier mechanics, peer benchmarks, interactions, logs, flags" },
-                  { step: "Step 2", color: C.gold, label: "Fold-wise importance", detail: "Permute each feature in each CV fold; keep top ~35 by RMSE degradation per fold" },
-                  { step: "Step 3", color: C.blue, label: "Consensus → 27 final", detail: "Features in both folds form the consensus set; backfill from importance ranking if < 20" },
-                ].map((s, i) => (
-                  <div key={i} style={{ background: `${s.color}0E`, border: `1px solid ${s.color}30`, borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ color: s.color, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{s.step}</div>
-                    <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{s.label}</div>
-                    <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.45 }}>{s.detail}</div>
-                  </div>
-                ))}
-              </div>
-              <p style={{ color: C.muted, fontSize: 12, margin: "12px 0 0", lineHeight: 1.6 }}>
-                Why not SHAP or mutual information? Permutation importance is model-aware and evaluated on held-out validation folds — it measures <em>actual predictive value</em>, not just correlation with the target. Features like <code style={{ color: C.gold }}>equity_gap_pct_assets</code> and <code style={{ color: C.gold }}>age_x_size_tier</code> rank poorly on Pearson r but survive fold-wise selection, confirming their non-linear signal.
-              </p>
-            </Card>
 
             {/* Key challenges ahead */}
             <Heading sub="The hardest problems we will face — and how we plan to tackle them">Key Challenges Ahead</Heading>
@@ -2658,6 +2634,15 @@ export default function App() {
                 The next phase is model development, hyperparameter optimisation, SHAP interpretation, and final evaluation.
                 We will not just predict — we will explain.
               </p>
+            </div>
+
+            {/* ── QR CODE — only on last tab ── */}
+            <div style={{ marginTop: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "28px 0" }}>
+              <p style={{ color: C.muted, fontSize: 12, textTransform: "uppercase", letterSpacing: 1.5, margin: 0, fontWeight: 700 }}>Scan to explore the full dashboard</p>
+              <div style={{ background: "#fff", padding: 14, borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+                <QRCodeSVG value="https://expert-ai-project.vercel.app" size={140} fgColor="#0B1120" bgColor="#ffffff" />
+              </div>
+              <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>expert-ai-project.vercel.app</p>
             </div>
           </>
         )}
