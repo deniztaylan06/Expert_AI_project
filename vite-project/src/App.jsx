@@ -426,6 +426,36 @@ function computeYearsInBusinessAnalysis(rows) {
 }
 
 // === OUTLIER DISTRIBUTION DATA ===
+function computeMissingnessData(rows) {
+  const filtered = rows.filter(r => [2018, 2019, 2020].includes(r.fiscal_year));
+  const n = filtered.length;
+  const features = [
+    { key: "production_value",    label: "Production Value",    group: "Income Statement" },
+    { key: "production_costs",    label: "Production Costs",    group: "Income Statement" },
+    { key: "operating_income",    label: "Operating Income",    group: "Income Statement" },
+    { key: "net_profit_loss",     label: "Net Profit / Loss",   group: "Income Statement" },
+    { key: "total_assets",        label: "Total Assets",        group: "Balance Sheet" },
+    { key: "total_fixed_assets",  label: "Fixed Assets",        group: "Balance Sheet" },
+    { key: "current_assets",      label: "Current Assets",      group: "Balance Sheet" },
+    { key: "shareholders_equity", label: "Shareholders Equity", group: "Balance Sheet" },
+    { key: "total_debt",          label: "Total Debt",          group: "Balance Sheet" },
+    { key: "short_term_debt",     label: "Short-Term Debt",     group: "Balance Sheet" },
+    { key: "long_term_debt",      label: "Long-Term Debt",      group: "Balance Sheet" },
+    { key: "roe",                 label: "ROE",                 group: "Ratios" },
+    { key: "roi",                 label: "ROI",                 group: "Ratios" },
+    { key: "leverage",            label: "Leverage",            group: "Ratios" },
+    { key: "current_ratio",       label: "Current Ratio",       group: "Ratios" },
+    { key: "debt_to_assets",      label: "Debt / Assets",       group: "Ratios" },
+    { key: "province",            label: "Province",            group: "Company Info" },
+    { key: "years_in_business",   label: "Years in Business",   group: "Company Info" },
+    { key: "revenue_change",      label: "Revenue Change",      group: "Target" },
+  ];
+  return features.map(f => {
+    const missing = filtered.filter(r => r[f.key] === null || r[f.key] === undefined || r[f.key] === "" || (typeof r[f.key] === "number" && !isFinite(r[f.key]))).length;
+    return { ...f, missing, pct: n > 0 ? round2(missing / n * 100) : 0 };
+  }).sort((a, b) => b.pct - a.pct);
+}
+
 function computeOutliersData(rows) {
   const variables = [
     { key: "production_value",    label: "Production Value" },
@@ -457,6 +487,7 @@ function processData(rawRows) {
     company_id:       r.company_id,
     fiscal_year:      parseInt(r.fiscal_year),
     region:           r.region,
+    province:         r.province || null,
     ateco_sector:     parseInt(r.ateco_sector),
     legal_form:       r.legal_form,
     production_value:    parseFloat(r.production_value)    || 0,
@@ -555,13 +586,14 @@ function processData(rawRows) {
   const correlationData      = computeCorrelationData(rows);
   const yearsInBusinessData  = computeYearsInBusinessAnalysis(rows);
   const outliersData         = computeOutliersData(rows);
+  const missingnessData      = computeMissingnessData(rows);
   const yearsCorrelationData = {
     2018: computeYearCorrData(rows, 2018),
     2019: computeYearCorrData(rows, 2019),
     2020: computeYearCorrData(rows, 2020),
   };
 
-  return { yearsData, crossYear, crossMetrics, uniqueCompanies, totalRows, covidSectorImpact, signalData, regionMapData, correlationData, yearsInBusinessData, outliersData, yearsCorrelationData };
+  return { yearsData, crossYear, crossMetrics, uniqueCompanies, totalRows, covidSectorImpact, signalData, regionMapData, correlationData, yearsInBusinessData, outliersData, missingnessData, yearsCorrelationData };
 }
 
 // === PER-YEAR STATS (fully dynamic) ===
@@ -1516,13 +1548,41 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
       {/* ── HERO ── */}
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ color: C.white, fontSize: 28, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
-          Italian Company Revenue Dataset
+          Challenge 3 — Revenue Forecasting
         </h2>
-        <p style={{ color: C.muted, fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
-          This dataset captures financial statements for Italian companies across fiscal years 2018–2021.
-          The prediction challenge: <b style={{ color: C.accent }}>forecast next-year revenue change (%)</b> from current-year financials.
-          The analysis below shows why we select <b style={{ color: C.gold }}>production_value_next</b> as the primary modeling target — it is measurable, has strong feature correlations, and avoids the volatility of percentage change as a direct target.
-        </p>
+
+        {/* Challenge description card */}
+        <div style={{ background: `${C.accent}09`, border: `1px solid ${C.accent}22`, borderLeft: `4px solid ${C.accent}`, borderRadius: 10, padding: "14px 18px", marginBottom: 18 }}>
+          <p style={{ color: C.accent, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 6px" }}>Business Context</p>
+          <p style={{ color: C.white, fontSize: 14, fontWeight: 600, margin: "0 0 8px", lineHeight: 1.5 }}>
+            Forecast the <b style={{ color: C.accent }}>percentage change in revenue</b> for the next fiscal year — helping companies with budget planning and investors with valuation.
+          </p>
+          <p style={{ color: C.light, fontSize: 13, margin: "0 0 10px", lineHeight: 1.6 }}>
+            We work with annual financial statements (balance sheet, income statement, ratios) for Italian companies spanning 2018–2021.
+            The training window covers <b style={{ color: C.gold }}>fiscal years 2018–2020</b>; the held-out test set uses 2022–2023 data.
+            Key challenges include <b style={{ color: C.coral }}>time-series aware validation</b> (no future leakage), handling extreme outliers from M&amp;A events, and the fact that percentage change is a highly volatile target with a weak direct signal.
+          </p>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <div>
+              <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Primary Metric</p>
+              <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: 0 }}>RMSE</p>
+            </div>
+            <div>
+              <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Secondary</p>
+              <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: 0 }}>MAPE · MAE</p>
+            </div>
+            <div>
+              <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Business Metric</p>
+              <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: 0 }}>Directional Accuracy</p>
+            </div>
+            <div>
+              <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Success Target</p>
+              <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: 0 }}>MAPE &lt; 15% · Dir. Acc. &gt; 70%</p>
+            </div>
+          </div>
+        </div>
+
+
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <KPI label="Unique Companies"   value={uniqueCompanies.toLocaleString()} sub="Distinct entities"          color={C.accent} />
           <KPI label="Total Observations" value={totalRows.toLocaleString()}        sub="Company–year rows (3 yrs)"  color={C.blue}   />
@@ -1547,6 +1607,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
           </p>
         </div>
       </Card>
+
 
       {/* ── SPLIT CORRELATION MATRICES (pooled) ── */}
       <Heading
@@ -1738,7 +1799,7 @@ export default function App() {
     </div>
   );
 
-  const { yearsData, crossYear, uniqueCompanies, totalRows, covidSectorImpact, signalData, regionMapData, correlationData, yearsInBusinessData, outliersData, yearsCorrelationData } = appData;
+  const { yearsData, crossYear, uniqueCompanies, totalRows, covidSectorImpact, signalData, regionMapData, correlationData, yearsInBusinessData, outliersData, missingnessData, yearsCorrelationData } = appData;
   const bestYear          = crossYear.reduce((a, b) => a.median > b.median ? a : b);
   const highestVolatility = crossYear.reduce((a, b) => a.std    > b.std    ? a : b);
 
@@ -1796,10 +1857,14 @@ export default function App() {
       <div style={{ background: C.navy, borderBottom: `1px solid ${C.border}`, padding: "20px 28px 14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
           <div style={{ width: 5, height: 28, background: C.accent, borderRadius: 3 }} />
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Revenue Forecasting — EDA Intelligence</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Revenue Forecasting — EDA & Feature Engineering</h1>
         </div>
         <p style={{ color: C.muted, fontSize: 13, margin: "2px 0 14px 15px", letterSpacing: 0.4 }}>
           Challenge 3  •  {uniqueCompanies.toLocaleString()} unique Italian companies  •  {totalRows.toLocaleString()} observations across 2018–2020  •  Target: next-year revenue change (%)
+          {"  •  "}
+          <a href="https://github.com/deniztaylan06/Expert_AI_project/tree/main" target="_blank" rel="noopener noreferrer" style={{ color: C.accent, textDecoration: "none", fontWeight: 600 }}>
+            GitHub ↗
+          </a>
         </p>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <Tab active={tab === "overview"}   onClick={() => setTab("overview")}   color={yearColors.overview}>Data Overview</Tab>
@@ -1816,7 +1881,7 @@ export default function App() {
 
       <div style={{ padding: "20px 28px 40px", maxWidth: 1180, margin: "0 auto" }}>
 
-        {tab === "overview" && <DataOverviewSection correlationData={correlationData} yearsInBusinessData={yearsInBusinessData} uniqueCompanies={uniqueCompanies} totalRows={totalRows} outliersData={outliersData} />}
+        {tab === "overview" && <DataOverviewSection correlationData={correlationData} yearsInBusinessData={yearsInBusinessData} uniqueCompanies={uniqueCompanies} totalRows={totalRows} outliersData={outliersData} missingnessData={missingnessData} />}
         {["2018","2019","2020"].includes(tab) && <YearSection yr={Number(tab)} yearsData={yearsData} yearsCorrelation={yearsCorrelationData[Number(tab)]} sharedDomains={sharedDomains} />}
         {tab === "map" && <ItalyMapTab regionMapData={regionMapData} />}
 
@@ -2597,9 +2662,21 @@ export default function App() {
           </>
         )}
 
-        <div style={{ marginTop: 36, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
-          <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>ExpertAI Challenge 3</p>
-          <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>Source: train_data.csv  •  Training data only — no data leakage</p>
+        <div style={{ marginTop: 36, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>
+            ExpertAI Challenge 3  •  LUISS University 2025/2026
+          </p>
+          <a
+            href="https://github.com/deniztaylan06/Expert_AI_project/tree/main"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "center", gap: 6, color: C.accent, fontSize: 12, fontWeight: 600, textDecoration: "none", background: `${C.accent}12`, border: `1px solid ${C.accent}30`, borderRadius: 6, padding: "5px 12px", whiteSpace: "nowrap" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            github.com/deniztaylan06/Expert_AI_project
+          </a>
         </div>
       </div>
     </div>
