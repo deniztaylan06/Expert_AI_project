@@ -774,7 +774,7 @@ function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
       </div>
 
       {/* ── SECTION 1: Target Quantile Table + Distribution ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 14 }}>
+      <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 14 }}>
         <div>
           <Heading sub="Target variable percentile breakdown">Quantile Analysis — Revenue Change</Heading>
           <Card>
