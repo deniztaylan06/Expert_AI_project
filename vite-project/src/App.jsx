@@ -1598,7 +1598,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
               <b style={{ color: C.light }}>Province encoding (Naples):</b> ~900 apparently missing <code style={{ color: C.blue, fontSize: 11 }}>province</code> values were not truly missing — <b style={{ color: C.light }}>"NA" is the official abbreviation for Naples (Napoli)</b>, which was being parsed as <code style={{ color: C.coral, fontSize: 11 }}>NaN</code>. Corrected before any analysis.
             </p>
             <p style={{ color: C.muted, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
-              <b style={{ color: C.light }}>Structural missingness in ROE & Leverage:</b> Both variables were recomputed directly from the raw data using the data dictionary equations — <code style={{ color: C.blue, fontSize: 11 }}>roe = net_profit_loss / shareholders_equity</code> and <code style={{ color: C.blue, fontSize: 11 }}>leverage = total_debt / shareholders_equity</code>. ~40 missing values each, caused by companies with zero shareholders' equity — structural undefined values rather than data collection errors.            </p>
+              <b style={{ color: C.light }}>Structural missingness in ROE & Leverage:</b> Both variables were recomputed directly from the raw data using the data dictionary equations — <code style={{ color: C.blue, fontSize: 11 }}>roe = net_profit_loss / shareholders_equity</code> and <code style={{ color: C.blue, fontSize: 11 }}>leverage = total_debt / shareholders_equity</code>. ~40 missing values each, caused by companies with zero shareholders' equity. Rather than simple median imputation, missing values were filled using the most similar companies — matched on <b style={{ color: C.light }}>same sector, same legal form, and same fiscal year</b> — making the imputed value contextually appropriate rather than a global average.            </p>
           </div>
         </div>
       </div>
@@ -2474,6 +2474,7 @@ export default function App() {
                   {[
                     { feature: "Monetary columns", strategy: "Median per fiscal year", reason: "Right-skewed; median robust to outliers" },
                     { feature: "Ratio columns (ROI, margin…)", strategy: "Winsorise P1/P99 → median", reason: "Division instability near zero" },
+                    { feature: "ROE & Leverage (structural zeros)", strategy: "Similarity-based imputation", reason: "Matched on sector, legal form & fiscal year" },
                     { feature: "Temporal lag features", strategy: "Forward-fill within company", reason: "Preserves time-series continuity" },
                     { feature: "Target (revenue_change_next)", strategy: "Row excluded from training", reason: "No future info available — not imputable" },
                   ].map((r, i) => (
