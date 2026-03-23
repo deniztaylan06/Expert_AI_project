@@ -1724,7 +1724,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
         <div style={{ background: `${C.coral}10`, border: `1px solid ${C.coral}25`, borderRadius: 8, padding: "10px 14px", marginTop: 10 }}>
           <span style={{ color: C.coral, fontSize: 13, fontWeight: 600 }}>
             Key takeaway: The point cloud is structurally identical across all 3 years — dense near zero, sparse at extremes, no age gradient.
-            Company age carries <b>zero predictive signal</b>. Do not include <code>years_in_business</code> as a raw feature.
+            Company age shows very weak predictive signal. We should consider excluding <code>years_in_business</code> as a raw feature in the modeling phase.
           </span>
         </div>
       </Card>
