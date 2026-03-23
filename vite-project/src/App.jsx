@@ -1598,8 +1598,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
               <b style={{ color: C.light }}>Province encoding (Naples):</b> ~900 apparently missing <code style={{ color: C.blue, fontSize: 11 }}>province</code> values were not truly missing — <b style={{ color: C.light }}>"NA" is the official abbreviation for Naples (Napoli)</b>, which was being parsed as <code style={{ color: C.coral, fontSize: 11 }}>NaN</code>. Corrected before any analysis.
             </p>
             <p style={{ color: C.muted, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
-              <b style={{ color: C.light }}>ROE division by zero:</b> ~40 missing <code style={{ color: C.blue, fontSize: 11 }}>roe</code> values were caused by companies with zero shareholders' equity (division by zero). Handled via <b style={{ color: C.light }}>fiscal-year median imputation</b> after winsorising at P1/P99 — consistent with our ratio imputation strategy applied to all ratio features.
-            </p>
+              <b style={{ color: C.light }}>Structural missingness in ROE & Leverage:</b> Both variables were recomputed directly from the raw data using the data dictionary equations — <code style={{ color: C.blue, fontSize: 11 }}>roe = net_profit_loss / shareholders_equity</code> and <code style={{ color: C.blue, fontSize: 11 }}>leverage = total_debt / shareholders_equity</code>. ~40 missing values each, caused by companies with zero shareholders' equity — structural undefined values rather than data collection errors.            </p>
           </div>
         </div>
       </div>
@@ -1866,9 +1865,15 @@ export default function App() {
 
       {/* HEADER */}
       <div style={{ background: C.navy, borderBottom: `1px solid ${C.border}`, padding: "20px 28px 14px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <div style={{ width: 5, height: 28, background: C.accent, borderRadius: 3 }} />
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Revenue Forecasting — EDA & Feature Engineering</h1>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 5, height: 28, background: C.accent, borderRadius: 3 }} />
+            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Revenue Forecasting — EDA & Feature Engineering</h1>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}30`, borderRadius: 6, padding: "4px 10px", color: C.accent, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>Group 6</span>
+            <span style={{ color: C.muted, fontSize: 12 }}>Deniz Taylan · Yarkin Yavuz · Gustavo Depieri Fioravanti · Koray Aydin</span>
+          </div>
         </div>
         <p style={{ color: C.muted, fontSize: 13, margin: "2px 0 14px 15px", letterSpacing: 0.4 }}>
           Challenge 3  •  {uniqueCompanies.toLocaleString()} unique Italian companies  •  {totalRows.toLocaleString()} observations across 2018–2020  •  Target: next-year revenue change (%)
