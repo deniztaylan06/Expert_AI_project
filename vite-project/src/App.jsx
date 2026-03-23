@@ -1844,7 +1844,7 @@ export default function App() {
       distAxis:     niceAxisConfig(distMax),
       sizeDistAxis: niceAxisConfig(sizeDistMax),
       segAxis,
-      regX:         [-35, 35],
+      regX:         [-35, 40],
     };
   })();
 
