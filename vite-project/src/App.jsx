@@ -1714,8 +1714,8 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
                     <YAxis
                       dataKey="y" name="revenue_change_next" type="number"
                       domain={[0, 6000]}
-                      tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} width={44}
-                      label={{ value: "revenue_change_next", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 10, dx: -2 }}
+                      tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} width={42}
+                      label={{ value: "RC Next (%)", angle: -90, position: "insideLeft", fill: C.muted, fontSize: 11, dx: -10 }}
                     />
                     <ZAxis range={[12, 12]} />
                     <Tooltip
