@@ -1589,6 +1589,19 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
           <KPI label="Raw Features"         value="30+"                               sub="Financial & structural"     color={C.gold}   />
           <KPI label="Fiscal Years"       value="2018–2021"                         sub="4 years of statements"      color={C.purple} />
         </div>
+
+        {/* Data quality notes */}
+        <div style={{ marginTop: 14, background: `${C.blue}0C`, border: `1px solid ${C.blue}22`, borderRadius: 8, padding: "10px 14px" }}>
+          <p style={{ color: C.blue, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>🔍 Data Quality Findings</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <p style={{ color: C.muted, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
+              <b style={{ color: C.light }}>Province encoding (Naples):</b> ~900 apparently missing <code style={{ color: C.blue, fontSize: 11 }}>province</code> values were not truly missing — <b style={{ color: C.light }}>"NA" is the official abbreviation for Naples (Napoli)</b>, which was being parsed as <code style={{ color: C.coral, fontSize: 11 }}>NaN</code>. Corrected before any analysis.
+            </p>
+            <p style={{ color: C.muted, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
+              <b style={{ color: C.light }}>ROE division by zero:</b> ~40 missing <code style={{ color: C.blue, fontSize: 11 }}>roe</code> values were caused by companies with zero shareholders' equity (division by zero). Handled via <b style={{ color: C.light }}>fiscal-year median imputation</b> after winsorising at P1/P99 — consistent with our ratio imputation strategy applied to all ratio features.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* ── OUTLIER BEHAVIOR ── */}
