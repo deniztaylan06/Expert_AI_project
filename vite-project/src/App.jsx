@@ -1832,8 +1832,6 @@ export default function App() {
     const distMax     = Math.max(...yrs.flatMap(yr => yearsData[yr].distBuckets.map(b => b.count)));
     const sizeDistMax = Math.max(...yrs.flatMap(yr => yearsData[yr].sizeDist.map(t => t.count)));
     const segMax      = Math.max(...yrs.flatMap(yr => yearsData[yr].sizeSeg.map(s => s.medTarget)));
-    const regMin      = Math.min(...yrs.flatMap(yr => yearsData[yr].regions.map(r => r.medTarget)));
-    const regMax      = Math.max(...yrs.flatMap(yr => yearsData[yr].regions.map(r => r.medTarget)));
     // segAxis: floor at -100, clean ticks from -100 up to max
     const segSteps = [50, 100, 200, 250, 500, 1000];
     const segStep  = segSteps.find(s => s >= segMax / 6) || 1000;
@@ -1846,7 +1844,7 @@ export default function App() {
       distAxis:     niceAxisConfig(distMax),
       sizeDistAxis: niceAxisConfig(sizeDistMax),
       segAxis,
-      regX:         [Math.floor(regMin - 5), Math.ceil(regMax + 5)],
+      regX:         [-35, 35],
     };
   })();
 
