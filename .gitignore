@@ -21,3 +21,4 @@ notebook/catboost_info/
 
 *.csv
 !vite-project/public/*.csv
+catboost_info/
