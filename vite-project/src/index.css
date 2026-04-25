@@ -133,11 +133,96 @@ select {
 .corr-header.corr-target .corr-header-inner { color: #F0B942; }
 
 /* ===== Mobile Responsive ===== */
+
+/* Tablet — 2-col grids collapse */
 @media (max-width: 768px) {
-  .grid-2col {
-    grid-template-columns: 1fr !important;
-  }
+  .grid-2col,
   .grid-3col {
     grid-template-columns: 1fr !important;
   }
+
+  /* Any inline grid that uses repeat(N, ...) collapses to 1 col */
+  [style*="gridTemplateColumns: \"1fr 1fr\""],
+  [style*="gridTemplateColumns: \"repeat(2"] ,
+  [style*="gridTemplateColumns: \"repeat(3"],
+  [style*="gridTemplateColumns: \"repeat(4"],
+  [style*="gridTemplateColumns: \"2fr 1fr"],
+  [style*="gridTemplateColumns: \"3fr 2fr"],
+  [style*="gridTemplateColumns: \"1.3fr 1fr"],
+  [style*="gridTemplateColumns: \"1.2fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
 }
+
+/* Phone — tighter padding and font reductions */
+@media (max-width: 480px) {
+  /* Header */
+  [style*="padding: \"20px 28px"] {
+    padding: 12px 14px !important;
+  }
+
+  /* Main content area */
+  [style*="padding: \"20px 28px 40px"] {
+    padding: 12px 14px 32px !important;
+  }
+
+  /* Tab bar: scroll horizontally instead of wrapping awkwardly */
+  [style*="display: \"flex\", gap: 6, flexWrap: \"wrap\""] {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    gap: 4px !important;
+    scrollbar-width: none;
+  }
+  [style*="display: \"flex\", gap: 6, flexWrap: \"wrap\""]::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Page title — smaller */
+  h1[style*="fontSize: 24"] {
+    font-size: 17px !important;
+  }
+  h2[style*="fontSize: 24"] {
+    font-size: 18px !important;
+  }
+
+  /* KPI stat numbers */
+  [style*="fontSize: 26, fontWeight: 800"] {
+    font-size: 20px !important;
+  }
+  [style*="fontSize: 22, fontWeight: 800"] {
+    font-size: 18px !important;
+  }
+
+  /* Charts: reduce height */
+  .recharts-responsive-container {
+    min-height: 140px;
+  }
+
+  /* Tables: allow horizontal scroll */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  /* Italy map: reduce height */
+  .map-container {
+    height: 340px !important;
+  }
+}
+
+/* Tab bar: hide scrollbar, prevent buttons from shrinking */
+.tab-bar::-webkit-scrollbar { display: none; }
+.tab-bar > button { flex-shrink: 0; }
+
+/* Ensure the tab scrollbar doesn't show on any size */
+::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1B2A45; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #2A3F60; }
