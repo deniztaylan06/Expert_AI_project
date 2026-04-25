@@ -3206,15 +3206,16 @@ export default function App() {
                     ))}
                   </div>
                 </Card>
-                <Card>
-                  <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: "0 0 12px" }}>How It Works</p>
-                  {[
+                <Card style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                  <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: "0 0 18px", textAlign: "center" }}>How It Works</p>
+                  <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", flex: 1 }}>
+                    {[
                     { step: "1", title: "Regression first", body: "The Lasso log-target model predicts the continuous revenue change for each company. This is the primary output." },
                     { step: "2", title: "Bucket the prediction", body: "The continuous prediction is then mapped to one of 3 or 5 regime buckets based on fixed thresholds. No separate classifier is trained on a different feature set." },
                     { step: "3", title: "Compare to actual buckets", body: "For validation years where actual revenue change is known, we check whether predicted and actual buckets match. This gives weighted F1, macro F1, and balanced accuracy." },
                     { step: "4", title: "Supplement, not replace", body: "Regime labels are a communication layer on top of regression. The submission CSV contains the raw predicted revenue change; the buckets are added for business readability." },
-                  ].map((s, i) => (
-                    <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: i < 3 ? `1px solid ${C.border}` : "none" }}>
+                    ].map((s, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, padding: "14px 0", borderBottom: i < 3 ? `1px solid ${C.border}` : "none", maxWidth: 700, width: "100%", margin: "0 auto" }}>
                       <span style={{ background: C.gold, color: C.bg, fontSize: 11, fontWeight: 800, width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{s.step}</span>
                       <div>
                         <p style={{ color: C.gold, fontSize: 12, fontWeight: 700, margin: "0 0 2px" }}>{s.title}</p>
@@ -3222,6 +3223,7 @@ export default function App() {
                       </div>
                     </div>
                   ))}
+                  </div>
                 </Card>
               </div>
 
