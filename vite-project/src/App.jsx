@@ -1805,6 +1805,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [tab, setTab]         = useState("overview");
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth <= 768;
+  });
 
   useEffect(() => {
     fetch("/train_data.csv")
@@ -1818,6 +1822,16 @@ export default function App() {
       })
       .catch(e => { setError(e.message); setLoading(false); });
   }, []);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const part2TwoCol = isMobile ? "1fr" : "1fr 1fr";
+  const part2WideSplit = isMobile ? "1fr" : "1.2fr 1fr";
+  const part2AltSplit = isMobile ? "1fr" : "1fr 1.1fr";
 
   const yearColors = { overview: C.white, "2018": C.accent, "2019": C.blue, "2020": C.gold, signals: C.orange, map: C.teal, summary: C.purple, features: "#A78BFA", nextsteps: "#F472B6", featsel: "#38BDF8", models: "#34D399", tuning: "#FB923C", advanced: "#E879F9", regime: "#F87171", regions2: "#22D3EE", forecast: "#FCD34D" };
 
@@ -2652,7 +2666,7 @@ export default function App() {
               </Card>
 
               <Heading sub="49 selected features grouped by economic domain" insight="Sector dummies (17) dominate the count, structural industry membership is the strongest stable signal across all validation years">Feature Domain Breakdown</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 12 }}>
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700 }}>Domain Composition</p>
                   {domains.map((d, i) => {
@@ -2760,7 +2774,7 @@ export default function App() {
               </p>
 
               <Heading sub="Lasso log-target workflow retrained on three expanding time windows: pre-COVID, COVID, and post-COVID recovery" insight="Directional accuracy and Spearman ρ both improve as the training window broadens, the model gets better, not worse, over time">Historical Stability Audit, 3 Rolling Folds</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 <Card>
                   {stability.map((s, i) => (
                     <div key={i} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: 8, padding: "12px 0", borderBottom: i < 2 ? `1px solid ${C.border}` : "none" }}>
@@ -2901,7 +2915,7 @@ export default function App() {
 
               {/* ── TARGET CLIPPING ── */}
               <Heading sub="P5/P95 clipping is selected because it minimises WAPE, the primary evaluation metric" insight="P5-P95 is the only configuration that improves both WAPE and TMAPE, adding prediction winsorisation hurts both">Target Clipping Sensitivity, WAPE View</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700 }}>WAPE by Clipping Strategy <span style={{ color: C.accent, fontWeight: 400, textTransform: "none" }}>(lower = better)</span></p>
                   <ResponsiveContainer width="100%" height={160}>
@@ -3102,7 +3116,7 @@ export default function App() {
               </Card>
 
               <Heading sub="Four innovative post-processing and ensemble techniques applied on top of the base model" insight="Each idea targets a specific weakness: tail calibration, peer norms, regime separation, or ensemble variance reduction">Method Deep-Dives</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 {methods.map((m, i) => (
                   <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `4px solid ${m.color}`, borderRadius: 10, padding: "16px 18px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -3167,7 +3181,7 @@ export default function App() {
 
               {/* WHY */}
               <Heading sub="The regression model predicts a continuous revenue change value. Regime classification adds a second interpretive layer by asking: which growth bucket will this company fall into?">Why Regime Classification?</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 <Card>
                   <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: "0 0 10px" }}>The Problem With Continuous Regression Alone</p>
                   <p style={{ color: C.light, fontSize: 13, lineHeight: 1.55, margin: "0 0 14px" }}>
@@ -3229,7 +3243,7 @@ export default function App() {
 
               {/* BUCKET DEFINITIONS */}
               <Heading sub="Two classification schemes tested: 5-bucket (granular) and 3-bucket (simplified). Buckets are defined by fixed revenue change thresholds." insight="35.9% of companies in the 2021 holdout fall into Severe Decline and 34.4% into Hypergrowth. A bimodal distribution makes classification hard">Bucket Definitions and Class Distribution</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 <Card style={{ display: "flex", flexDirection: "column" }}>
                   <p style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 16px" }}>5-Bucket Scheme</p>
                   {buckets5.map((b, i) => (
@@ -3274,7 +3288,7 @@ export default function App() {
 
               {/* PERFORMANCE */}
               <Heading sub="Both schemes evaluated on the same temporal splits as the regression model: 2020 validation and 2021 locked holdout" insight="3-bucket weighted F1 reaches 56.3% on holdout, well above the 33% random baseline for a 3-class problem">Classification Performance</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2WideSplit, gap: 14 }}>
                 <Card style={{ padding: 0, overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
@@ -3608,7 +3622,7 @@ export default function App() {
               </div>
 
               <Heading sub="Observable final audit: 2022 financial statements → 2023 revenue change (actual labels available)" insight="Clean base and CatBoost sensitivity agree, the model generalises to 2023 unseen data">2022 → 2023 Final Audit</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 {[
                   { label: "Rows Audited", val: "2,895", sub: "Italian companies with 2022 financials", color: C.accent },
                   { label: "Directional Accuracy", val: "74.2%", sub: "Lasso clean base on 2023 actual labels", color: C.gold },
@@ -3663,7 +3677,7 @@ export default function App() {
               </div>
 
               <Heading sub="Directional accuracy and Spearman ρ across all 5 annual evaluation windows, 2019 through 2023" insight="Consistent directional accuracy 73-75% across 5 years including the COVID shock">Full Cross-Year Stability (5 Folds)</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 12px" }}>Directional Accuracy Trend</p>
                   <ResponsiveContainer width="100%" height={180}>
@@ -3726,7 +3740,7 @@ export default function App() {
                     { objective: "Best TMAPE challenger",     choice: "Peer-Prior Shrinkage (161.7% TMAPE)",    reason: "Transfers cleanly; pulls outliers toward sector-size norms" },
                     { objective: "Rejected challenger",       choice: "Residual Correction",              reason: "Appears strong on 2020 but TMAPE degrades sharply on holdout" },
                   ].map((r, i) => (
-                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 8, padding: "8px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: part2AltSplit, gap: 8, padding: "8px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
                       <div>
                         <p style={{ color: C.muted, fontSize: 11, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: 0.6 }}>{r.objective}</p>
                         <p style={{ color: C.accent, fontSize: 12, fontWeight: 700, margin: 0 }}>{r.choice}</p>
