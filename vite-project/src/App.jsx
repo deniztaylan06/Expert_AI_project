@@ -1832,6 +1832,15 @@ export default function App() {
   const part2TwoCol = isMobile ? "1fr" : "1fr 1fr";
   const part2WideSplit = isMobile ? "1fr" : "1.2fr 1fr";
   const part2AltSplit = isMobile ? "1fr" : "1fr 1.1fr";
+  const part2ThreeCol = isMobile ? "1fr" : "repeat(3,1fr)";
+  const part2FourCol = isMobile ? "1fr" : "repeat(4,1fr)";
+  const part2FiveCol = isMobile ? "1fr" : "repeat(5,1fr)";
+  const part2MetricsSplit = isMobile ? "1fr" : "1.2fr 1fr 1fr";
+  const part2ModelSplit = isMobile ? "1fr" : "1.3fr 1fr";
+  const part2ConfusionSplit = isMobile ? "1fr" : "1.4fr 1fr";
+  const part2ForecastSplit = isMobile ? "1fr" : "3fr 2fr";
+  const part2LeaderboardSplit = isMobile ? "1fr" : "3fr 1fr";
+  const part2DecisionSplit = isMobile ? "1fr" : "2fr 1fr";
 
   const yearColors = { overview: C.white, "2018": C.accent, "2019": C.blue, "2020": C.gold, signals: C.orange, map: C.teal, summary: C.purple, features: "#A78BFA", nextsteps: "#F472B6", featsel: "#38BDF8", models: "#34D399", tuning: "#FB923C", advanced: "#E879F9", regime: "#F87171", regions2: "#22D3EE", forecast: "#FCD34D" };
 
@@ -2613,7 +2622,7 @@ export default function App() {
               </div>
 
               <Heading sub="Four candidate pools tested on the 2020 validation fold, ranked by Spearman ρ, WAPE, and TMAPE₉₅. Experiment D is immediately rejected." insight="Experiment A wins: best Spearman and WAPE despite lower raw directional accuracy than Exp C">Feature Selection Experiments A / B / C / D</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 6 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2FourCol, gap: 14, marginBottom: 6 }}>
                 {experiments.map(ex => (
                   <div key={ex.id} style={{ background: C.card, border: `2px solid ${ex.color}50`, borderTop: `4px solid ${ex.color}`, borderRadius: 10, padding: "18px 20px", position: "relative" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -2777,7 +2786,7 @@ export default function App() {
               <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 <Card>
                   {stability.map((s, i) => (
-                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: 8, padding: "12px 0", borderBottom: i < 2 ? `1px solid ${C.border}` : "none" }}>
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: part2MetricsSplit, gap: 8, padding: "12px 0", borderBottom: i < 2 ? `1px solid ${C.border}` : "none" }}>
                       <div>
                         <p style={{ color: s.color, fontSize: 12, fontWeight: 700, margin: "0 0 2px" }}>{s.shortFold}</p>
                         <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>{s.n} features</p>
@@ -2816,7 +2825,7 @@ export default function App() {
               </div>
 
               <Heading sub="Leakage is the most common mistake in financial ML, we audit 6 risk categories" insight="All 6 checks pass: the workflow is clean and defensible">Leakage Control Audit, 6 Checks</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2ThreeCol, gap: 12 }}>
                 {[
                   { risk: "Target Leakage", control: "Drop next-year target/value columns from every feature list", status: true },
                   { risk: "Future Peer Statistics", control: "Use T-1 joins or fold-safe computation for all sector/region aggregates", status: true },
@@ -2869,7 +2878,7 @@ export default function App() {
 
               {/* ── LASSO: CLEAN BASE MODEL ── */}
               <Heading sub="Lasso is our selected clean base model, L1 regularisation, log-target transformation, P5/P95 clipping" insight="WAPE 88.71% on 2020 validation, 86.45% on the locked 2021 holdout, improving as the training window grows">Lasso, The Clean Base Model</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2ModelSplit, gap: 14 }}>
                 <Card>
                   <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: 0.8 }}>Why Lasso works for revenue forecasting</p>
                   {[
@@ -2958,7 +2967,7 @@ export default function App() {
 
               {/* ── CATBOOST GRID ── */}
               <Heading sub="CatBoost is tuned as the advanced sensitivity model, grid search on 2018-19→2020 only, 9 top combinations shown" insight="Best config depth=6, iter=300, lr=0.03, but Lasso's WAPE 88.71% still beats CatBoost's 88.69% while being fully interpretable">CatBoost Advanced Sensitivity Grid</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "3fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2LeaderboardSplit, gap: 14 }}>
                 <Card style={{ padding: 0, overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
@@ -3188,7 +3197,7 @@ export default function App() {
                     Revenue change is continuous but the decision-relevant question is often categorical: will this company grow or decline? A regression output of +37.4% and +18.6% may look different numerically but both mean the same thing to a portfolio manager: moderate positive growth, same bucket.
                   </p>
                   <div style={{ background: C.bg, borderRadius: 8, overflow: "hidden", marginBottom: 14 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", borderBottom: `1px solid ${C.border}` }}>
                       <div style={{ padding: "7px 10px", color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Point Estimate</div>
                       <div style={{ padding: "7px 10px", color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", borderLeft: `1px solid ${C.border}` }}>Regime Label</div>
                     </div>
@@ -3198,7 +3207,7 @@ export default function App() {
                       ["-61.2%", "Severe Decline (≤ -50%)"],
                       ["+183.0%", "Hypergrowth (> 100%)"],
                     ].map(([pt, lbl], i) => (
-                      <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: i < 3 ? `1px solid ${C.border}` : "none" }}>
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", borderBottom: i < 3 ? `1px solid ${C.border}` : "none" }}>
                         <div style={{ padding: "7px 10px", color: C.gold, fontSize: 12, fontFamily: "monospace", fontWeight: 700 }}>{pt}</div>
                         <div style={{ padding: "7px 10px", color: C.accent, fontSize: 12, borderLeft: `1px solid ${C.border}` }}>{lbl}</div>
                       </div>
@@ -3207,7 +3216,7 @@ export default function App() {
                   <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", lineHeight: 1.5 }}>
                     The first two rows predict the same regime despite a 19pp difference. A stakeholder screening for at-risk companies doesn't need the exact number, just the right bucket.
                   </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: part2ThreeCol, gap: 8 }}>
                     {[
                       { who: "Credit Risk", what: "Flag <-50% as loan watch-list trigger", color: C.coral },
                       { who: "Investor", what: "Screen >100% hypergrowth for due diligence", color: C.purple },
@@ -3374,7 +3383,7 @@ export default function App() {
 
               {/* 3-BUCKET CONFUSION MATRIX */}
               <Heading sub="3-bucket confusion matrix on the 2021 locked holdout. Rows = actual, columns = predicted." insight="Severe Decline and Hypergrowth both exceed 63% recall. The Normal middle class is the hardest to separate at 36%.">Confusion Matrix: 3-Bucket, 2021 Holdout</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 14, alignItems: "stretch" }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2ConfusionSplit, gap: 14, alignItems: "stretch" }}>
                 <Card style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", flex: 1 }}>
                     <thead>
@@ -3442,7 +3451,7 @@ export default function App() {
 
               {/* DESIGN CHOICES */}
               <Heading sub="Three design choices that make regime classification defensible rather than just a label generator">Design Choices and Why They Matter</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2ThreeCol, gap: 12 }}>
                 {[
                   { color: C.accent, title: "Same splits, no separate data", body: "The classifier uses identical 2018-19→2020 and 2018-20→2021 temporal splits as the regression model. There is no separate held-out set for the classifier, because the buckets are derived from the same regression predictions. This avoids a second layer of data leakage risk." },
                   { color: C.gold,   title: "Fixed thresholds, no adaptive binning", body: "Bucket boundaries (-50%, 0%, 50%, 100%) are defined before any model training. We do not fit the thresholds to the training data or to the class distribution. This means the buckets mean the same thing across all years and all splits." },
@@ -3481,7 +3490,7 @@ export default function App() {
               >Regional Revenue Growth: 2018-2022</Heading>
 
               {/* KPI row */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2FourCol, gap: 12, marginBottom: 20 }}>
                 {[
                   { label: "Regions covered", val: data.length, sub: "with labeled observations", color: "#22D3EE" },
                   { label: "National median", val: `${nationalMedian > 0 ? "+" : ""}${nationalMedian}%`, sub: "weighted by observation count", color: C.gold },
@@ -3638,7 +3647,7 @@ export default function App() {
               </div>
 
               <Heading sub="True forward-looking prediction: 2023 financial statements → 2024 revenue change (no labels yet)" insight="2,895 companies scored; the updated export shows a broad two-tail distribution with mean predicted change +118.3%">2024 Revenue-Change Prediction (Forward-Looking)</Heading>
-              <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: part2ForecastSplit, gap: 14 }}>
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 12px" }}>Predicted 2024 Revenue Regime Distribution</p>
                   <ResponsiveContainer width="100%" height={200}>
@@ -3713,7 +3722,7 @@ export default function App() {
                 <p style={{ color: C.gold, fontSize: 16, fontWeight: 700, margin: "0 0 10px", fontFamily: "'Playfair Display', Georgia, serif" }}>
                   The Full Story in 5 Numbers
                 </p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: part2FiveCol, gap: 12 }}>
                   {[
                     { n: "75.62%", label: "Best directional acc", sub: "Selected Lasso base, locked 2021 holdout", color: C.accent },
                     { n: "0.703", label: "Best Spearman ρ", sub: "Ranking quality on the locked holdout", color: C.blue },
@@ -3730,7 +3739,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ marginTop: 26, display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14, alignItems: "stretch" }}>
+              <div style={{ marginTop: 26, display: "grid", gridTemplateColumns: part2DecisionSplit, gap: 14, alignItems: "stretch" }}>
                 <Card>
                   <p style={{ color: C.white, fontSize: 16, fontWeight: 700, margin: "0 0 14px", fontFamily: "'Playfair Display', Georgia, serif" }}>Model Decision Table</p>
                   {[
