@@ -1625,7 +1625,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
               <b style={{ color: C.light }}>Province encoding (Naples):</b> ~900 apparently missing <code style={{ color: C.blue, fontSize: 11 }}>province</code> values were not truly missing, <b style={{ color: C.light }}>"NA" is the official abbreviation for Naples (Napoli)</b>, which was being parsed as <code style={{ color: C.coral, fontSize: 11 }}>NaN</code>. Corrected before any analysis.
             </p>
             <p style={{ color: C.muted, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
-              <b style={{ color: C.light }}>Structural missingness in ROE & Leverage:</b> Both variables were recomputed directly from the raw data using the data dictionary equations, <code style={{ color: C.blue, fontSize: 11 }}>roe = net_profit_loss / shareholders_equity</code> and <code style={{ color: C.blue, fontSize: 11 }}>leverage = total_debt / shareholders_equity</code>. ~40 missing values each, caused by companies with zero shareholders' equity. Rather than simple median imputation, missing values were filled using the most similar companies, matched on <b style={{ color: C.light }}>same sector, same legal form, and same fiscal year</b>, making the imputed value contextually appropriate rather than a global average.            </p>
+              <b style={{ color: C.light }}>Structural missingness in ROE & Leverage:</b> Both variables were recomputed directly from the raw data using the data dictionary equations, <code style={{ color: C.blue, fontSize: 11 }}>roe = net_profit_loss / shareholders_equity</code> and <code style={{ color: C.blue, fontSize: 11 }}>leverage = total_debt / shareholders_equity</code>. ~40 missing values each, caused by companies with non-positive shareholders' equity. Rather than simple median imputation, missing values were filled using the most similar companies, matched on <b style={{ color: C.light }}>same sector, same legal form, and same fiscal year</b>, making the imputed value contextually appropriate rather than a global average.            </p>
           </div>
         </div>
       </div>
@@ -2885,7 +2885,7 @@ export default function App() {
                     { icon: "λ", color: C.accent,  title: "L1 Regularisation",   body: "Lasso shrinks irrelevant coefficients to exactly zero. With 49 input features and weak individual signals, this automatic sparsity prevents noise from accumulating into bias." },
                     { icon: "↗", color: C.gold,    title: "Log-Target Transform",  body: "We fit log(next_production_value), then back-transform to revenue change. Revenue follows a log-normal distribution, this single transformation removes 90% of the extreme-tail instability from the training loss." },
                     { icon: "✂", color: C.blue,    title: "P5/P95 Target Clipping",body: "Clip the training target at the 5th and 95th percentile so a handful of M&A-driven outliers can't dominate the regression. Evaluation is always on the unclipped full distribution." },
-                    { icon: "⇉", color: C.purple,  title: "No Additional Grid Needed", body: "The default Lasso alpha=1.0 combined with the log-transform and clipping already produces a well-regularised model. Extensive alpha sweeps on a single noisy validation year create overfitting risk, not better models." },
+                    { icon: "⇉", color: C.purple,  title: "Selected Sparse Specification", body: "The clean-base linear model uses a light L1 penalty with alpha = 0.001. We keep the linear benchmark simple and stable instead of over-optimising it on one noisy validation year." },
                   ].map((p, i) => (
                     <div key={i} style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: i < 3 ? `1px solid ${C.border}` : "none" }}>
                       <span style={{ color: p.color, fontSize: 18, fontWeight: 800, width: 22, flexShrink: 0, lineHeight: 1.4 }}>{p.icon}</span>
@@ -2905,7 +2905,7 @@ export default function App() {
                       { label: "Spearman ρ, Holdout",    val: "0.703",  color: C.blue },
                       { label: "Directional Acc, Holdout",val: "75.62%",color: C.light },
                       { label: "Features Used",           val: "49",     color: C.light },
-                      { label: "Regularisation",          val: "α = 1.0 (default)", color: C.muted },
+                      { label: "Regularisation",          val: "α = 0.001", color: C.muted },
                     ].map((m, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < 5 ? `1px solid ${C.border}` : "none" }}>
                         <span style={{ color: C.muted, fontSize: 12 }}>{m.label}</span>
@@ -2966,7 +2966,7 @@ export default function App() {
               </div>
 
               {/* ── CATBOOST GRID ── */}
-              <Heading sub="CatBoost is tuned as the advanced sensitivity model, grid search on 2018-19→2020 only, 9 top combinations shown" insight="Best config depth=6, iter=300, lr=0.03, but Lasso's WAPE 88.71% still beats CatBoost's 88.69% while being fully interpretable">CatBoost Advanced Sensitivity Grid</Heading>
+              <Heading sub="CatBoost is tuned as the advanced sensitivity model, grid search on 2018-19→2020 only, 9 top combinations shown" insight="Best config depth=6, iter=300, lr=0.03. CatBoost edges Lasso slightly on 2020 WAPE, but Lasso remains the cleaner primary model for the final project story.">CatBoost Advanced Sensitivity Grid</Heading>
               <div style={{ display: "grid", gridTemplateColumns: part2LeaderboardSplit, gap: 14 }}>
                 <Card style={{ padding: 0, overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -3048,7 +3048,7 @@ export default function App() {
               icon: "⟳",
               how: "Blend each firm's raw prediction with the sector×size-tier median using α=0.10: final = α×peer_median + (1-α)×prediction.",
               why: "Revenue change is mean-reverting within peer groups. A firm with an outlier prediction is likely over-fitted on noise, a small pull toward its peers corrects this without sacrificing individual signal.",
-              result: "Best TMAPE on 2021 holdout (162.5%). Transfers cleanly to unseen years.",
+              result: "Best TMAPE on the 2021 holdout (161.7%). Transfers cleanly to unseen years.",
             },
             {
               name: "Quantile Calibration",
@@ -3089,7 +3089,7 @@ export default function App() {
                 <div style={{ flex: 1, height: 1, background: C.border }} />
               </div>
 
-              <Heading sub="8 methods tested on the 2021 locked holdout, ranked by directional accuracy, then WAPE, then TMAPE₉₅" insight="Lasso Base ranks #1: tied on direction and Spearman with the top group, but lowest WAPE and TMAPE among them">Challenger Methods Leaderboard, 2021 Holdout</Heading>
+              <Heading sub="8 methods tested on the 2021 locked holdout, ranked by Spearman ρ, then WAPE, then TMAPE₉₅" insight="Lasso Base ranks #1 because it stays strongest once ranking quality and robust error are prioritised together.">Challenger Methods Leaderboard, 2021 Holdout</Heading>
               <Card style={{ padding: 0, overflow: "hidden" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -3119,7 +3119,7 @@ export default function App() {
                 </table>
                 <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`, background: C.cardAlt }}>
                   <p style={{ color: C.muted, fontSize: 11, margin: 0, lineHeight: 1.5 }}>
-                    Ranking: Dir. Acc desc → WAPE asc → TMAPE₉₅ asc. Rows 1-3 are tied on direction (75.62%) and Spearman (0.703), WAPE breaks the tie in favour of Lasso. CatBoost ranks #7 on direction but has the <strong style={{ color: C.orange }}>best WAPE across all 8 methods (86.40%)</strong>, it is the preferred choice when aggregate error minimisation outweighs sign accuracy.
+                    Ranking: Spearman ρ desc → WAPE asc → TMAPE₉₅ asc. Lasso stays first because it combines the strongest ranking quality with the cleanest overall robust-error profile. CatBoost still posts the <strong style={{ color: C.orange }}>best raw WAPE across the challengers (86.40%)</strong>, which is why it remains the advanced sensitivity check.
                   </p>
                 </div>
               </Card>
@@ -3194,12 +3194,12 @@ export default function App() {
                 <Card>
                   <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: "0 0 10px" }}>The Problem With Continuous Regression Alone</p>
                   <p style={{ color: C.light, fontSize: 13, lineHeight: 1.55, margin: "0 0 14px" }}>
-                    Revenue change is continuous but the decision-relevant question is often categorical: will this company grow or decline? A regression output of +37.4% and +18.6% may look different numerically but both mean the same thing to a portfolio manager: moderate positive growth, same bucket.
+                    Revenue change is continuous but the decision-relevant question is often categorical: will this company grow or decline? For example, +37.4% and +18.6% are different point estimates, but both still land in the same 0-50% stable-growth bucket.
                   </p>
                   <div style={{ background: C.bg, borderRadius: 8, overflow: "hidden", marginBottom: 14 }}>
                     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", borderBottom: `1px solid ${C.border}` }}>
-                      <div style={{ padding: "7px 10px", color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Point Estimate</div>
-                      <div style={{ padding: "7px 10px", color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", borderLeft: `1px solid ${C.border}` }}>Regime Label</div>
+                      <div style={{ padding: "7px 10px", color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Example Point Estimate</div>
+                      <div style={{ padding: "7px 10px", color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", borderLeft: `1px solid ${C.border}` }}>Mapped Regime Label</div>
                     </div>
                     {[
                       ["+37.4%", "Stable Growth (0-50%)"],
@@ -3214,7 +3214,7 @@ export default function App() {
                     ))}
                   </div>
                   <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", lineHeight: 1.5 }}>
-                    The first two rows predict the same regime despite a 19pp difference. A stakeholder screening for at-risk companies doesn't need the exact number, just the right bucket.
+                    The first two rows show two different regression outputs that map to the same bucket despite a 19pp gap. For screening, the bucket is often more actionable than the exact percentage.
                   </p>
                   <div style={{ display: "grid", gridTemplateColumns: part2ThreeCol, gap: 8 }}>
                     {[
@@ -3325,7 +3325,7 @@ export default function App() {
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 12px" }}>How to Read These Numbers</p>
                   {[
-                    { metric: "Weighted F1", val: "56.3%", baseline: "33% random (3-class)", color: C.accent, note: "Primary metric. Weights each class by its support size. A weighted F1 of 56.3% on a bimodal target with 82 features is solid." },
+                    { metric: "Weighted F1", val: "56.3%", baseline: "33% random (3-class)", color: C.accent, note: "Primary metric. Weights each class by its support size. A weighted F1 of 56.3% on this bimodal target is a solid result." },
                     { metric: "Macro F1", val: "55.3%", baseline: "33% random", color: C.blue, note: "Treats all classes equally. The gap between macro and weighted F1 is small (1pp), meaning performance is balanced across classes." },
                     { metric: "Balanced Accuracy", val: "55.5%", baseline: "33% random", color: C.gold, note: "Average recall across all 3 classes. Penalises imbalance more harshly than plain accuracy." },
                   ].map((m, i) => (
@@ -3455,7 +3455,7 @@ export default function App() {
                 {[
                   { color: C.accent, title: "Same splits, no separate data", body: "The classifier uses identical 2018-19→2020 and 2018-20→2021 temporal splits as the regression model. There is no separate held-out set for the classifier, because the buckets are derived from the same regression predictions. This avoids a second layer of data leakage risk." },
                   { color: C.gold,   title: "Fixed thresholds, no adaptive binning", body: "Bucket boundaries (-50%, 0%, 50%, 100%) are defined before any model training. We do not fit the thresholds to the training data or to the class distribution. This means the buckets mean the same thing across all years and all splits." },
-                  { color: C.blue,   title: "82 features for classification", body: "The classifier uses a broader 82-feature set than the regression model (49 features). Classification is less sensitive to overfitting through feature count because the outcome is categorical and tree-based classifiers handle large feature sets well." },
+                  { color: C.blue,   title: "Broader feature set for classification", body: "The classifier uses a broader feature pool than the 49-feature regression model. That is acceptable here because the task is categorical and the tree-based classifier can absorb wider context without changing the main regression workflow." },
                 ].map((c, i) => (
                   <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `4px solid ${c.color}`, borderRadius: 10, padding: "16px 18px" }}>
                     <p style={{ color: c.color, fontSize: 14, fontWeight: 700, margin: "0 0 8px" }}>{c.title}</p>
@@ -3609,11 +3609,11 @@ export default function App() {
             { label: "2022→2023 CatBoost (Sensitivity)", model: "CatBoost", dacc: 73.64, spear: 0.6712, tmape: 172.1, wape: 88.6, smape: 109.1, color: C.blue,   tag: "TRANSFER CHECK" },
           ];
           const pred2024 = [
-            { pct: "<-50%",   pct_val: 27.1, color: C.coral,   label: "Severe Decline" },
-            { pct: "-50:0%",  pct_val: 22.2, color: "#FF9F7F", label: "Mild Decline" },
-            { pct: "0:50%",   pct_val: 15.4, color: C.gold,    label: "Stable Growth" },
-            { pct: "50:100%", pct_val: 10.9, color: C.accent,  label: "Strong Growth" },
-            { pct: ">100%",   pct_val: 24.4, color: C.purple,  label: "Hypergrowth" },
+            { pct: "<-50%",   pct_val: 28.2, color: C.coral,   label: "Severe Decline" },
+            { pct: "-50:0%",  pct_val: 21.4, color: "#FF9F7F", label: "Mild Decline" },
+            { pct: "0:50%",   pct_val: 12.8, color: C.gold,    label: "Stable Growth" },
+            { pct: "50:100%", pct_val: 8.4,  color: C.accent,  label: "Strong Growth" },
+            { pct: ">100%",   pct_val: 29.2, color: C.purple,  label: "Hypergrowth" },
           ];
           const stabilityFull = [
             { fold: "18→19",    dacc: 72.94, spear: 0.636, color: C.blue },
@@ -3634,9 +3634,9 @@ export default function App() {
               <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 {[
                   { label: "Rows Audited", val: "2,895", sub: "Italian companies with 2022 financials", color: C.accent },
-                  { label: "Directional Accuracy", val: "74.2%", sub: "Lasso clean base on 2023 actual labels", color: C.gold },
-                  { label: "Spearman ρ", val: "0.678", sub: "Ranking quality of growth predictions", color: C.blue },
-                  { label: "TMAPE₉₅ Coverage", val: "169.9%", sub: "Slightly wider than 2021 holdout, expected on new data", color: C.purple },
+                  { label: "Directional Accuracy", val: "74.16%", sub: "Lasso clean base on 2023 actual labels", color: C.gold },
+                  { label: "Spearman ρ", val: "0.6780", sub: "Ranking quality of growth predictions", color: C.blue },
+                  { label: "TMAPE₉₅ Coverage", val: "169.89%", sub: "Slightly wider than 2021 holdout, expected on new data", color: C.purple },
                 ].map((m, i) => (
                   <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${m.color}`, borderRadius: 8, padding: "16px 18px" }}>
                     <p style={{ color: m.color, fontSize: 24, fontWeight: 800, margin: "0 0 4px", fontFamily: "'Playfair Display', Georgia, serif" }}>{m.val}</p>
@@ -3646,7 +3646,7 @@ export default function App() {
                 ))}
               </div>
 
-              <Heading sub="True forward-looking prediction: 2023 financial statements → 2024 revenue change (no labels yet)" insight="2,895 companies scored; the updated export shows a broad two-tail distribution with mean predicted change +118.3%">2024 Revenue-Change Prediction (Forward-Looking)</Heading>
+              <Heading sub="True forward-looking prediction: 2023 financial statements → 2024 revenue change (no labels yet)" insight="2,895 companies scored. The chart below shows the Lasso clean-base forecast, while the export keeps CatBoost as a sensitivity column.">2024 Revenue-Change Prediction (Forward-Looking)</Heading>
               <div style={{ display: "grid", gridTemplateColumns: part2ForecastSplit, gap: 14 }}>
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 12px" }}>Predicted 2024 Revenue Regime Distribution</p>
@@ -3663,25 +3663,25 @@ export default function App() {
                     </BarChart>
                   </ResponsiveContainer>
                   <p style={{ color: C.muted, fontSize: 11, margin: "10px 0 0", lineHeight: 1.5 }}>
-                    The newest export is still clearly two-tailed, but less extreme than the older website snapshot: about 29% of firms fall into severe decline and 29% into hypergrowth, with a larger middle band around mild decline and modest growth.
+                    The clean-base 2024 forecast remains strongly two-tailed: about 28% of firms fall into severe decline and 29% into hypergrowth, with the remaining firms concentrated in the mild-decline and modest-growth middle bands.
                   </p>
                 </Card>
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 12px" }}>2024 Prediction Summary</p>
                   {[
                     { label: "Firms Scored", val: "2,895", color: C.white },
-                    { label: "Mean Predicted Change", val: "+118.3%", color: C.accent },
-                    { label: "Median Predicted Change", val: "+0.9%", color: C.muted },
+                    { label: "Mean Predicted Change", val: "+117.5%", color: C.accent },
+                    { label: "Median Predicted Change", val: "+1.6%", color: C.muted },
                     { label: "Train Window", val: "2018-2022", color: C.blue },
                     { label: "Source Year", val: "2023 financials", color: C.gold },
-                    { label: "Model", val: "CatBoost log-target", color: C.purple },
+                    { label: "Primary Model", val: "Lasso clean base", color: C.purple },
                   ].map((m, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: i < 5 ? `1px solid ${C.border}` : "none" }}>
                       <span style={{ color: C.muted, fontSize: 12 }}>{m.label}</span>
                       <span style={{ color: m.color, fontSize: 13, fontWeight: 700 }}>{m.val}</span>
                     </div>
                   ))}
-                  <p style={{ color: C.muted, fontSize: 11, margin: "12px 0 0", lineHeight: 1.5 }}>True OOS with no 2024 labels yet. The mean stays high because the right tail is still heavy, but the median sits near flat growth, which is a more realistic center-of-mass view.</p>
+                  <p style={{ color: C.muted, fontSize: 11, margin: "12px 0 0", lineHeight: 1.5 }}>True OOS with no 2024 labels yet. The website shows the Lasso clean-base forecast; the export also keeps a CatBoost sensitivity column for comparison. The mean stays high because the right tail remains heavy, while the median stays close to flat growth.</p>
                 </Card>
               </div>
 
