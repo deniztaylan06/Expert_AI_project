@@ -777,6 +777,67 @@ const Card = ({ children, style = {} }) => (
   <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px", ...style }}>{children}</div>
 );
 
+// Sortable table — click header once to sort (smart default direction per metric), click again to reverse
+function SortableTable({ columns, rows, rowRenderer, headerStyle = {} }) {
+  const [sortKey, setSortKey]   = useState(null);
+  const [sortDir, setSortDir]   = useState("asc");
+
+  const handleClick = (col) => {
+    if (!col.sortable) return;
+    if (sortKey === col.key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(col.key);
+      setSortDir(col.lowerBetter ? "asc" : "desc");
+    }
+  };
+
+  const sorted = sortKey
+    ? [...rows].sort((a, b) => {
+        const va = a[sortKey], vb = b[sortKey];
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        return sortDir === "asc" ? va - vb : vb - va;
+      })
+    : rows;
+
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <thead>
+        <tr style={{ background: C.cardAlt }}>
+          {columns.map((col, i) => {
+            const active = sortKey === col.key;
+            const arrow  = active ? (sortDir === "asc" ? " ↑" : " ↓") : (col.sortable ? " ⇅" : "");
+            return (
+              <th
+                key={i}
+                onClick={() => handleClick(col)}
+                style={{
+                  color: active ? C.accent : C.muted,
+                  fontSize: 11, fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: 0.8, padding: "10px 12px",
+                  textAlign: col.right ? "right" : "left",
+                  borderBottom: `1px solid ${C.border}`,
+                  whiteSpace: "nowrap",
+                  cursor: col.sortable ? "pointer" : "default",
+                  userSelect: "none",
+                  transition: "color 0.15s",
+                  ...headerStyle,
+                }}
+              >
+                {col.label}{arrow}
+              </th>
+            );
+          })}
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((row, i) => rowRenderer(row, i, sorted))}
+      </tbody>
+    </table>
+  );
+}
+
 // === YEAR SECTION ===
 function YearSection({ yr, yearsData, yearsCorrelation, sharedDomains }) {
   const d = yearsData[yr];
@@ -1673,44 +1734,55 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
       >
         Why production_value_next? Feature Correlation Comparison
       </Heading>
-      {featureTargetCorrs && featureTargetCorrs.length > 0 && (
-        <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <Card>
-            <p style={{ color: C.gold, fontSize: 12, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
-              production_value_next, Normal Signal
-            </p>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={featureTargetCorrs} layout="vertical" barCategoryGap="12%" margin={{ left: 8, right: 28, top: 4, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                <XAxis type="number" domain={[-0.5, 0.5]} ticks={[-0.5, -0.25, 0, 0.25, 0.5]} tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
-                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} width={95} />
-                <ReferenceLine x={0} stroke={C.muted} strokeWidth={1.5} />
-                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with PV Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.gold }} />
-                <Bar dataKey="corrPV" name="Corr with PV Next" radius={[0, 4, 4, 0]}>
-                  {featureTargetCorrs.map((d, i) => <Cell key={i} fill={d.corrPV >= 0 ? C.gold : C.coral} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-          <Card>
-            <p style={{ color: C.coral, fontSize: 12, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
-              revenue_change_next, Weak Signal
-            </p>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={featureTargetCorrs} layout="vertical" barCategoryGap="12%" margin={{ left: 8, right: 28, top: 4, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                <XAxis type="number" domain={[-0.3, 0.3]} ticks={[-0.3, -0.15, 0, 0.15, 0.3]} tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
-                <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} width={95} />
-                <ReferenceLine x={0} stroke={C.muted} strokeWidth={1.5} />
-                <Tooltip formatter={(v) => [v.toFixed(3), "Corr with RC Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.blue }} />
-                <Bar dataKey="corrRC" name="Corr with RC Next" radius={[0, 4, 4, 0]}>
-                  {featureTargetCorrs.map((d, i) => <Cell key={i} fill={Math.abs(d.corrRC) < 0.1 ? C.muted : d.corrRC >= 0 ? C.blue : C.coral} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-      )}
+      {featureTargetCorrs && featureTargetCorrs.length > 0 && (() => {
+        // Compute tight axis domains from actual data + 15% breathing room
+        const pvMax  = Math.max(...featureTargetCorrs.map(d => Math.abs(d.corrPV)));
+        const rcMax  = Math.max(...featureTargetCorrs.map(d => Math.abs(d.corrRC)));
+        const pvPad  = Math.ceil(pvMax * 1.2 * 20) / 20;  // round up to nearest 0.05
+        const rcPad  = Math.ceil(rcMax * 1.2 * 20) / 20;
+        const makeTicks = (lim, n = 5) => {
+          const step = (lim * 2) / (n - 1);
+          return Array.from({ length: n }, (_, i) => parseFloat((-lim + i * step).toFixed(2)));
+        };
+        return (
+          <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <Card>
+              <p style={{ color: C.gold, fontSize: 12, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
+                production_value_next, Normal Signal
+              </p>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={featureTargetCorrs} layout="vertical" barCategoryGap="12%" margin={{ left: 8, right: 28, top: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                  <XAxis type="number" domain={[-pvPad, pvPad]} ticks={makeTicks(pvPad)} tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
+                  <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} width={95} />
+                  <ReferenceLine x={0} stroke={C.muted} strokeWidth={1.5} />
+                  <Tooltip formatter={(v) => [v.toFixed(3), "Corr with PV Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.gold }} />
+                  <Bar dataKey="corrPV" name="Corr with PV Next" radius={[0, 4, 4, 0]}>
+                    {featureTargetCorrs.map((d, i) => <Cell key={i} fill={d.corrPV >= 0 ? C.gold : C.coral} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+            <Card>
+              <p style={{ color: C.coral, fontSize: 12, fontWeight: 700, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 1 }}>
+                revenue_change_next, Weak Signal
+              </p>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={featureTargetCorrs} layout="vertical" barCategoryGap="12%" margin={{ left: 8, right: 28, top: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                  <XAxis type="number" domain={[-rcPad, rcPad]} ticks={makeTicks(rcPad)} tick={{ fill: C.muted, fontSize: 13 }} axisLine={{ stroke: C.border }} tickFormatter={v => v.toFixed(2)} />
+                  <YAxis dataKey="label" type="category" tick={{ fill: C.light, fontSize: 13 }} axisLine={{ stroke: C.border }} width={95} />
+                  <ReferenceLine x={0} stroke={C.muted} strokeWidth={1.5} />
+                  <Tooltip formatter={(v) => [v.toFixed(3), "Corr with RC Next"]} contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13 }} labelStyle={{ color: C.white }} itemStyle={{ color: C.blue }} />
+                  <Bar dataKey="corrRC" name="Corr with RC Next" radius={[0, 4, 4, 0]}>
+                    {featureTargetCorrs.map((d, i) => <Cell key={i} fill={Math.abs(d.corrRC) < 0.02 ? C.muted : d.corrRC >= 0 ? C.blue : C.coral} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* ── YEARS IN BUSINESS, SCATTER BY YEAR ── */}
       <Heading
@@ -1800,11 +1872,212 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
 }
 
 // === MAIN DASHBOARD ===
+// Regional Analysis — sort by clicking column headers, exactly like the other tables
+function RegionalAnalysis({ data, isMobile }) {
+  const part2FourCol = isMobile ? "1fr" : "repeat(4,1fr)";
+
+  const [sortKey, setSortKey] = useState("median");
+  const [sortDir, setSortDir] = useState("desc");
+
+  const SORT_OPTS = {
+    median:     false, // lowerBetter
+    n:          false,
+    pctDecline: true,
+    pctNormal:  false,
+    pctHyper:   false,
+  };
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(SORT_OPTS[key] ? "asc" : "desc");
+    }
+  };
+
+  const sorted = [...data].sort((a, b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    return sortDir === "desc" ? vb - va : va - vb;
+  });
+
+  const maxAbs = Math.max(...sorted.map(d => Math.abs(d.median)));
+  const nationalMedian = round1(
+    data.reduce((s, d) => s + d.median * d.n, 0) / data.reduce((s, d) => s + d.n, 0)
+  );
+
+  const thStyle = (key) => ({
+    color: sortKey === key ? C.accent : C.muted,
+    fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5,
+    padding: "9px 12px", textAlign: key === "region" ? "left" : "right",
+    borderBottom: `1px solid ${C.border}`,
+    cursor: key === "region" ? "default" : "pointer",
+    userSelect: "none", whiteSpace: "nowrap",
+  });
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 20px" }}>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
+        <span style={{ color: "#22D3EE", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, whiteSpace: "nowrap" }}>Part II · Regional Analysis</span>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
+      </div>
+
+      <Heading
+        sub={`Median revenue_change_next by region across all labeled years (2018-2022). Computed from ${data.reduce((s, d) => s + d.n, 0).toLocaleString()} company-year observations.`}
+        insight={`${data[0]?.region} leads at ${data[0]?.median > 0 ? "+" : ""}${data[0]?.median}% median. ${data[data.length-1]?.region} trails at ${data[data.length-1]?.median}%. National weighted median: ${nationalMedian > 0 ? "+" : ""}${nationalMedian}%.`}
+      >Regional Revenue Growth: 2018-2022</Heading>
+
+      <div style={{ display: "grid", gridTemplateColumns: part2FourCol, gap: 12, marginBottom: 20 }}>
+        {[
+          { label: "Regions covered", val: data.length,                              sub: "with labeled observations",             color: "#22D3EE" },
+          { label: "National median", val: `${nationalMedian > 0 ? "+" : ""}${nationalMedian}%`, sub: "weighted by observation count", color: C.gold },
+          { label: "Best region",     val: data[0]?.region,                          sub: `+${data[0]?.median}% median`,           color: C.accent },
+          { label: "Weakest region",  val: data[data.length-1]?.region,              sub: `${data[data.length-1]?.median}% median`, color: C.coral },
+        ].map((k, i) => (
+          <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `3px solid ${k.color}`, borderRadius: 8, padding: "12px 16px" }}>
+            <p style={{ color: k.color, fontSize: 18, fontWeight: 800, margin: "0 0 3px", fontFamily: "'Playfair Display',serif" }}>{k.val}</p>
+            <p style={{ color: C.white, fontSize: 12, fontWeight: 700, margin: "0 0 2px" }}>{k.label}</p>
+            <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>{k.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Bar chart — order follows the active sort */}
+      <Heading sub="Sorted by median next-year revenue change. Bar length = magnitude. Colour = direction. Click column headers in the table below to re-sort.">Median Revenue Change by Region</Heading>
+      <Card>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          {sorted.map((d, i) => {
+            const barPct = maxAbs > 0 ? Math.abs(d.median) / maxAbs * 100 : 0;
+            const isPos = d.median >= 0;
+            const col = isPos ? C.accent : C.coral;
+            return (
+              <div key={d.region} style={{ display: "grid", gridTemplateColumns: "130px 1fr 60px 60px 60px", gap: 10, alignItems: "center", padding: "9px 4px", borderBottom: i < sorted.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ color: C.light, fontSize: 12, fontWeight: 600 }}>{d.region}</span>
+                <div style={{ position: "relative", height: 16, background: C.bg, borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ position: "absolute", [isPos ? "left" : "right"]: 0, width: `${barPct}%`, height: "100%", background: col, borderRadius: 4, transition: "width 0.3s" }} />
+                  <div style={{ position: "absolute", left: "50%", top: 0, width: 1, height: "100%", background: C.border }} />
+                </div>
+                <span style={{ color: col, fontSize: 12, fontWeight: 700, textAlign: "right" }}>{d.median > 0 ? "+" : ""}{d.median}%</span>
+                <span style={{ color: C.muted, fontSize: 11, textAlign: "right" }}>n={d.n.toLocaleString()}</span>
+                <span style={{ color: C.muted, fontSize: 10, textAlign: "right" }}>↓{d.pctDecline}%</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 12, display: "flex", gap: 20, padding: "8px 4px 0", borderTop: `1px solid ${C.border}` }}>
+          <span style={{ color: C.muted, fontSize: 11 }}><span style={{ color: C.accent, fontWeight: 700 }}>Green bar</span> = positive median. <span style={{ color: C.coral, fontWeight: 700 }}>Red bar</span> = negative median. Bar length = magnitude relative to max. ↓% = share of firms with &lt;-50% revenue change.</span>
+        </div>
+      </Card>
+
+      {/* Regime breakdown table — sortable headers */}
+      <Heading sub="Click any column header to sort. Same sort order also reorders the bar chart above." insight="All regions show heavy tails. No region escapes the bimodal distribution, but the balance shifts significantly.">Revenue Regime Distribution by Region</Heading>
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: C.cardAlt }}>
+              <th style={thStyle("region")}>Region</th>
+              {[
+                { key: "n",          label: "n obs" },
+                { key: "pctDecline", label: "Severe Decline ≤-50%" },
+                { key: "pctNormal",  label: "Normal" },
+                { key: "pctHyper",   label: "Hypergrowth >100%" },
+                { key: "median",     label: "Median" },
+              ].map(col => (
+                <th key={col.key} style={thStyle(col.key)} onClick={() => handleSort(col.key)}>
+                  {col.label}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : " ⇅"}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((d, i) => (
+              <tr key={d.region} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? "transparent" : `${C.cardAlt}50` }}>
+                <td style={{ padding: "8px 12px", color: C.light, fontSize: 13, fontWeight: 600 }}>{d.region}</td>
+                <td style={{ padding: "8px 12px", color: C.muted, fontSize: 12, textAlign: "right" }}>{d.n.toLocaleString()}</td>
+                <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                    <div style={{ width: `${d.pctDecline}px`, height: 8, background: C.coral, borderRadius: 2, maxWidth: 60 }} />
+                    <span style={{ color: d.pctDecline > 32 ? C.coral : C.light, fontSize: 12, fontWeight: d.pctDecline > 32 ? 700 : 400 }}>{d.pctDecline}%</span>
+                  </div>
+                </td>
+                <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                    <div style={{ width: `${d.pctNormal}px`, height: 8, background: C.gold, borderRadius: 2, maxWidth: 60 }} />
+                    <span style={{ color: C.light, fontSize: 12 }}>{d.pctNormal}%</span>
+                  </div>
+                </td>
+                <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                    <div style={{ width: `${d.pctHyper}px`, height: 8, background: C.purple, borderRadius: 2, maxWidth: 60 }} />
+                    <span style={{ color: d.pctHyper > 32 ? C.purple : C.light, fontSize: 12, fontWeight: d.pctHyper > 32 ? 700 : 400 }}>{d.pctHyper}%</span>
+                  </div>
+                </td>
+                <td style={{ padding: "8px 12px", textAlign: "right", color: d.median >= 0 ? C.accent : C.coral, fontSize: 13, fontWeight: 700 }}>{d.median > 0 ? "+" : ""}{d.median}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      {/* Q25-Q75 spread */}
+      <Heading sub="Interquartile range (Q25 to Q75) per region. Wider spread means more volatile revenue outcomes.">Revenue Change Spread: Q25 to Q75</Heading>
+      <Card>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[...data].sort((a, b) => (b.q75 - b.q25) - (a.q75 - a.q25)).map((d, i) => {
+            const iqr = d.q75 - d.q25;
+            const maxIQR = Math.max(...data.map(x => x.q75 - x.q25));
+            const pct = maxIQR > 0 ? (iqr / maxIQR) * 100 : 0;
+            return (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "130px 1fr 110px", gap: 10, alignItems: "center" }}>
+                <span style={{ color: C.light, fontSize: 12 }}>{d.region}</span>
+                <div style={{ background: C.bg, borderRadius: 4, height: 10, overflow: "hidden" }}>
+                  <div style={{ width: `${pct}%`, height: "100%", background: `${C.blue}BB`, borderRadius: 4 }} />
+                </div>
+                <span style={{ color: C.muted, fontSize: 11, textAlign: "right" }}>Q25 {d.q25 > 0 ? "+" : ""}{d.q25}% → Q75 +{d.q75}%</span>
+              </div>
+            );
+          })}
+        </div>
+        <p style={{ color: C.muted, fontSize: 11, margin: "12px 0 0", lineHeight: 1.5 }}>
+          IQR measures how spread out the middle 50% of revenue outcomes are. A wider IQR means more companies in that region are pulling hard in opposite directions, making predictions harder.
+        </p>
+      </Card>
+    </>
+  );
+}
+
+// Eased scroll — duration in ms, much more cinematic than browser default
+function slowScrollToTop(duration = 1000) {
+  const start     = window.scrollY;
+  const startTime = performance.now();
+  function step(now) {
+    const elapsed = now - startTime;
+    const t       = Math.min(elapsed / duration, 1);
+    const ease    = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out quad
+    window.scrollTo(0, start * (1 - ease));
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+const TAB_ORDER = ["overview","2018","2019","2020","signals","map","summary","features","featsel","models","tuning","advanced","regime","regions2","errors","forecast"];
+const TAB_LABELS = {
+  overview: "Data Overview", "2018": "2018 → 2019", "2019": "2019 → 2020",
+  "2020": "2020 → 2021", signals: "Revenue Signals", map: "Regional Map",
+  summary: "Summary", features: "Feature Eng.", featsel: "Feature Sel.",
+  models: "Model Results", tuning: "Hyperparameter", advanced: "Innovative Ideas",
+  regime: "Regime Class.", regions2: "Regional Analysis", forecast: "Final Forecast",
+  errors: "Error Analysis",
+};
+
 export default function App() {
   const [appData, setAppData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [tab, setTab]         = useState("overview");
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const isFirstRender = useRef(true);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.innerWidth <= 768;
@@ -1829,6 +2102,17 @@ export default function App() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    slowScrollToTop(700);
+  }, [tab]);
+
   const part2TwoCol = isMobile ? "1fr" : "1fr 1fr";
   const part2WideSplit = isMobile ? "1fr" : "1.2fr 1fr";
   const part2AltSplit = isMobile ? "1fr" : "1fr 1.1fr";
@@ -1842,7 +2126,7 @@ export default function App() {
   const part2LeaderboardSplit = isMobile ? "1fr" : "3fr 1fr";
   const part2DecisionSplit = isMobile ? "1fr" : "2fr 1fr";
 
-  const yearColors = { overview: C.white, "2018": C.accent, "2019": C.blue, "2020": C.gold, signals: C.orange, map: C.teal, summary: C.purple, features: "#A78BFA", nextsteps: "#F472B6", featsel: "#38BDF8", models: "#34D399", tuning: "#FB923C", advanced: "#E879F9", regime: "#F87171", regions2: "#22D3EE", forecast: "#FCD34D" };
+  const yearColors = { overview: C.white, "2018": C.accent, "2019": C.blue, "2020": C.gold, signals: C.orange, map: C.teal, summary: C.purple, features: "#A78BFA", nextsteps: "#F472B6", featsel: "#38BDF8", models: "#34D399", tuning: "#FB923C", advanced: "#E879F9", regime: "#F87171", regions2: "#22D3EE", forecast: "#FCD34D", errors: "#F472B6" };
 
   if (loading) return (
     <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, fontFamily: "'DM Sans', sans-serif" }}>
@@ -1914,7 +2198,7 @@ export default function App() {
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", color: C.white }}>
 
       {/* HEADER */}
-      <div style={{ background: C.navy, borderBottom: `1px solid ${C.border}`, padding: "20px 28px 14px" }}>
+      <div style={{ background: C.navy, borderBottom: `1px solid ${C.border}`, padding: "20px 28px 14px", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 5, height: 28, background: C.accent, borderRadius: 3 }} />
@@ -1949,6 +2233,7 @@ export default function App() {
           <Tab active={tab === "advanced"}  onClick={() => setTab("advanced")}  color={yearColors.advanced}>Innovative Ideas</Tab>
           <Tab active={tab === "regime"}    onClick={() => setTab("regime")}    color={yearColors.regime}>Regime Classification</Tab>
           <Tab active={tab === "regions2"}  onClick={() => setTab("regions2")}  color={yearColors.regions2}>Regional Analysis</Tab>
+          <Tab active={tab === "errors"}   onClick={() => setTab("errors")}   color={yearColors.errors}>Error Analysis</Tab>
           <Tab active={tab === "forecast"}  onClick={() => setTab("forecast")}  color={yearColors.forecast}>Final Forecast</Tab>
         </div>
       </div>
@@ -2726,15 +3011,15 @@ export default function App() {
         ═══════════════════════════════════════════════════════ */}
         {tab === "models" && (() => {
           const models = [
-            { name: "Lasso",            group: "linear",   features: 49, dacc: 74.5225, spear: 0.6841, color: C.accent, tag: "BEST OVERALL" },
-            { name: "ElasticNet",       group: "linear",   features: 49, dacc: 74.5225, spear: 0.6838, color: C.gold,   tag: "" },
-            { name: "LinearRegression", group: "linear",   features: 49, dacc: 74.6248, spear: 0.6829, color: C.muted,  tag: "Best Dir." },
-            { name: "Ridge",            group: "linear",   features: 49, dacc: 74.4884, spear: 0.6836, color: C.muted,  tag: "" },
-            { name: "RandomForest",     group: "advanced", features: 49, dacc: 74.4543, spear: 0.6736, color: C.teal,   tag: "" },
-            { name: "CatBoost",         group: "advanced", features: 49, dacc: 74.2838, spear: 0.6749, color: C.blue,   tag: "Best Tree" },
-            { name: "LightGBM",         group: "advanced", features: 49, dacc: 73.8745, spear: 0.6634, color: C.purple, tag: "" },
-            { name: "XGBoost",          group: "advanced", features: 49, dacc: 73.8745, spear: 0.6595, color: C.orange, tag: "" },
-            { name: "BaselineMedian",   group: "baseline", features: 49, dacc: 70.5662, spear: 0.5689, color: C.coral,  tag: "Baseline" },
+            { name: "Lasso",            group: "linear",   features: 49, dacc: 74.5225, spear: 0.6841, rmse: 494.7, color: C.accent, tag: "BEST OVERALL" },
+            { name: "ElasticNet",       group: "linear",   features: 49, dacc: 74.5225, spear: 0.6838, rmse: 495.1, color: C.gold,   tag: "" },
+            { name: "LinearRegression", group: "linear",   features: 49, dacc: 74.6248, spear: 0.6829, rmse: 495.0, color: C.muted,  tag: "Best Dir." },
+            { name: "Ridge",            group: "linear",   features: 49, dacc: 74.4884, spear: 0.6836, rmse: 495.3, color: C.muted,  tag: "" },
+            { name: "RandomForest",     group: "advanced", features: 49, dacc: 74.4543, spear: 0.6736, rmse: 509.4, color: C.teal,   tag: "" },
+            { name: "CatBoost",         group: "advanced", features: 49, dacc: 74.2838, spear: 0.6749, rmse: 501.8, color: C.blue,   tag: "Best Tree" },
+            { name: "LightGBM",         group: "advanced", features: 49, dacc: 73.8745, spear: 0.6634, rmse: 511.5, color: C.purple, tag: "" },
+            { name: "XGBoost",          group: "advanced", features: 49, dacc: 73.8745, spear: 0.6595, rmse: 514.7, color: C.orange, tag: "" },
+            { name: "BaselineMedian",   group: "baseline", features: 49, dacc: 70.5662, spear: 0.5689, rmse: 549.3, color: C.coral,  tag: "Baseline" },
           ];
           const stability = [
             { fold: "Pre-COVID\n2018→2019", shortFold: "2018→19",   dacc: 72.9364, spear: 0.6359, wape: 92.82, tmape: 156.9, n: 41, color: C.blue },
@@ -2750,33 +3035,34 @@ export default function App() {
                 <div style={{ flex: 1, height: 1, background: C.border }} />
               </div>
 
-              <Heading sub="9 models benchmarked on the 2020 temporal validation fold, 49 features, same leakage-safe split" insight="Lasso is the clean base model; CatBoost is kept as the advanced sensitivity check">Full Model Benchmark, 2020 Validation</Heading>
+              <Heading sub="9 models benchmarked on the 2020 temporal validation fold, 49 features, same leakage-safe split. Click any column header to sort." insight="Lasso is the clean base model; CatBoost is kept as the advanced sensitivity check">Full Model Benchmark, 2020 Validation</Heading>
               <Card style={{ padding: 0, overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: C.cardAlt }}>
-                      {["Model", "Group", "Features", "Dir. Acc ↑", "Spearman ρ ↑"].map((h, i) => (
-                        <th key={i} style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, padding: "10px 12px", textAlign: i < 2 ? "left" : "right", borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap" }}>{h}</th>
-                      ))}
+                <SortableTable
+                  columns={[
+                    { key: "name",     label: "Model",           sortable: false },
+                    { key: "group",    label: "Group",           sortable: false },
+                    { key: "features", label: "Features",        sortable: true,  lowerBetter: false, right: true },
+                    { key: "dacc",     label: "Dir. Acc ↑",      sortable: true,  lowerBetter: false, right: true },
+                    { key: "spear",    label: "Spearman ρ ↑",    sortable: true,  lowerBetter: false, right: true },
+                    { key: "rmse",     label: "RMSE P2-98 ↓",    sortable: true,  lowerBetter: true,  right: true },
+                  ]}
+                  rows={models}
+                  rowRenderer={(m, i) => (
+                    <tr key={i} style={{ background: `${C.accent}08`, opacity: 1, borderBottom: `1px solid ${C.border}` }}>
+                      <td style={{ padding: "9px 12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ color: C.white, fontSize: 13, fontWeight: 600 }}>{m.name}</span>
+                          {m.tag && <span style={{ background: `${m.color}25`, color: m.color, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 3 }}>{m.tag}</span>}
+                        </div>
+                      </td>
+                      <td style={{ padding: "9px 12px" }}><span style={{ background: `${groupColors[m.group]}15`, color: groupColors[m.group], fontSize: 11, padding: "2px 7px", borderRadius: 3, fontWeight: 600 }}>{m.group}</span></td>
+                      <td style={{ padding: "9px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{m.features}</td>
+                      <td style={{ padding: "9px 12px", textAlign: "right", color: C.light, fontWeight: 700, fontSize: 13 }}>{m.dacc.toFixed(2)}%</td>
+                      <td style={{ padding: "9px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{m.spear.toFixed(4)}</td>
+                      <td style={{ padding: "9px 12px", textAlign: "right", color: m.rmse < 496 ? C.accent : C.light, fontSize: 13 }}>{m.rmse.toFixed(1)}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {models.map((m, i) => (
-                      <tr key={i} style={{ background: i === 0 ? `${C.accent}08` : "transparent", borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: "9px 12px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ color: C.white, fontSize: 13, fontWeight: 600 }}>{m.name}</span>
-                            {m.tag && <span style={{ background: `${m.color}25`, color: m.color, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 3 }}>{m.tag}</span>}
-                          </div>
-                        </td>
-                        <td style={{ padding: "9px 12px" }}><span style={{ background: `${groupColors[m.group]}15`, color: groupColors[m.group], fontSize: 11, padding: "2px 7px", borderRadius: 3, fontWeight: 600 }}>{m.group}</span></td>
-                        <td style={{ padding: "9px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{m.features}</td>
-                        <td style={{ padding: "9px 12px", textAlign: "right", color: i === 0 ? C.accent : C.light, fontWeight: i === 0 ? 700 : 400, fontSize: 13 }}>{m.dacc.toFixed(2)}%</td>
-                        <td style={{ padding: "9px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{m.spear.toFixed(4)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  )}
+                />
               </Card>
               <p style={{ color: C.muted, fontSize: 12, margin: "8px 0 0 2px", lineHeight: 1.5 }}>
                 <strong style={{ color: C.white }}>Why Lasso over tree-based models?</strong> The feature selection rule ranks by <strong style={{ color: C.white }}>Spearman ρ</strong>, then WAPE, then TMAPE₉₅, metrics that are more meaningful than raw directional accuracy on a single noisy fold. Under these criteria <strong style={{ color: C.accent }}>Lasso</strong> wins: it achieves <strong style={{ color: C.accent }}>75.62% directional accuracy</strong>, <strong style={{ color: C.blue }}>0.703 Spearman</strong>, and <strong style={{ color: C.purple }}>164.5 TMAPE₉₅</strong> on the locked 2021 holdout, while being fully interpretable and less likely to overfit the extreme tails.
@@ -2852,15 +3138,15 @@ export default function App() {
         ═══════════════════════════════════════════════════════ */}
         {tab === "tuning" && (() => {
           const tuningRows = [
-            { depth: 6, iterations: 300, learningRate: 0.03, wape: 88.69, spear: 0.6801, tmape: 161.7, rank: 1 },
-            { depth: 6, iterations: 300, learningRate: 0.05, wape: 88.89, spear: 0.6805, tmape: 163.4, rank: 2 },
-            { depth: 4, iterations: 300, learningRate: 0.05, wape: 88.89, spear: 0.6802, tmape: 165.8, rank: 3 },
-            { depth: 4, iterations: 500, learningRate: 0.05, wape: 89.01, spear: 0.6794, tmape: 167.4, rank: 4 },
-            { depth: 4, iterations: 700, learningRate: 0.03, wape: 88.77, spear: 0.6793, tmape: 166.2, rank: 5 },
-            { depth: 6, iterations: 500, learningRate: 0.03, wape: 88.81, spear: 0.6772, tmape: 168.4, rank: 6 },
-            { depth: 4, iterations: 300, learningRate: 0.03, wape: 88.82, spear: 0.6805, tmape: 163.4, rank: 7 },
-            { depth: 6, iterations: 700, learningRate: 0.03, wape: 89.33, spear: 0.6762, tmape: 170.1, rank: 8 },
-            { depth: 6, iterations: 500, learningRate: 0.05, wape: 89.01, spear: 0.6772, tmape: 168.4, rank: 9 },
+            { depth: 6, iterations: 300, learningRate: 0.03, wape: 88.69, spear: 0.6801, tmape: 161.7, rmse: 501.8, rank: 1 },
+            { depth: 6, iterations: 300, learningRate: 0.05, wape: 88.89, spear: 0.6805, tmape: 163.4, rmse: 503.4, rank: 2 },
+            { depth: 4, iterations: 300, learningRate: 0.05, wape: 88.89, spear: 0.6802, tmape: 165.8, rmse: 504.2, rank: 3 },
+            { depth: 4, iterations: 500, learningRate: 0.05, wape: 89.01, spear: 0.6794, tmape: 167.4, rmse: 506.8, rank: 4 },
+            { depth: 4, iterations: 700, learningRate: 0.03, wape: 88.77, spear: 0.6793, tmape: 166.2, rmse: 505.6, rank: 5 },
+            { depth: 6, iterations: 500, learningRate: 0.03, wape: 88.81, spear: 0.6772, tmape: 168.4, rmse: 509.1, rank: 6 },
+            { depth: 4, iterations: 300, learningRate: 0.03, wape: 88.82, spear: 0.6805, tmape: 163.4, rmse: 504.8, rank: 7 },
+            { depth: 6, iterations: 700, learningRate: 0.03, wape: 89.33, spear: 0.6762, tmape: 170.1, rmse: 512.5, rank: 8 },
+            { depth: 6, iterations: 500, learningRate: 0.05, wape: 89.01, spear: 0.6772, tmape: 168.4, rmse: 508.3, rank: 9 },
           ];
           const clippingData = [
             { label: "No Clip",       clip: "None",         wape: 88.82, tmape: 173.0, note: "Extreme events dominate loss" },
@@ -2969,30 +3255,33 @@ export default function App() {
               <Heading sub="CatBoost is tuned as the advanced sensitivity model, grid search on 2018-19→2020 only, 9 top combinations shown" insight="Best config depth=6, iter=300, lr=0.03. CatBoost edges Lasso slightly on 2020 WAPE, but Lasso remains the cleaner primary model for the final project story.">CatBoost Advanced Sensitivity Grid</Heading>
               <div style={{ display: "grid", gridTemplateColumns: part2LeaderboardSplit, gap: 14 }}>
                 <Card style={{ padding: 0, overflow: "hidden" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ background: C.cardAlt }}>
-                        {["Rank", "depth", "iterations", "lr", "WAPE ↓", "Spearman ↑", "TMAPE₉₅ ↓"].map((h, i) => (
-                          <th key={i} style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, padding: "10px 12px", textAlign: i < 1 ? "center" : "right", borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                        ))}
+                  <SortableTable
+                    columns={[
+                      { key: "rank",         label: "Rank",         sortable: true,  lowerBetter: true,  right: true },
+                      { key: "depth",        label: "Depth",        sortable: true,  lowerBetter: false, right: true },
+                      { key: "iterations",   label: "Iterations",   sortable: true,  lowerBetter: false, right: true },
+                      { key: "learningRate", label: "LR",           sortable: true,  lowerBetter: false, right: true },
+                      { key: "wape",         label: "WAPE ↓",       sortable: true,  lowerBetter: true,  right: true },
+                      { key: "spear",        label: "Spearman ↑",   sortable: true,  lowerBetter: false, right: true },
+                      { key: "tmape",        label: "TMAPE₉₅ ↓",    sortable: true,  lowerBetter: true,  right: true },
+                      { key: "rmse",         label: "RMSE P2-98 ↓", sortable: true,  lowerBetter: true,  right: true },
+                    ]}
+                    rows={tuningRows}
+                    rowRenderer={(r, i) => (
+                      <tr key={i} style={{ background: r.rank === 1 ? `${C.orange}08` : "transparent", borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                          {r.rank === 1 ? <span style={{ background: `${C.orange}25`, color: C.orange, fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 3 }}>BEST</span> : <span style={{ color: C.muted, fontSize: 12 }}>#{r.rank}</span>}
+                        </td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{r.depth}</td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{r.iterations}</td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{r.learningRate.toFixed(2)}</td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: r.rank === 1 ? C.orange : C.light, fontWeight: r.rank === 1 ? 700 : 400, fontSize: 13 }}>{r.wape.toFixed(2)}%</td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{r.spear.toFixed(4)}</td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: r.tmape < 163 ? C.gold : C.light, fontSize: 13 }}>{r.tmape.toFixed(1)}%</td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: r.rmse < 503 ? C.accent : C.light, fontSize: 13 }}>{r.rmse.toFixed(1)}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {tuningRows.map((r, i) => (
-                        <tr key={i} style={{ background: i === 0 ? `${C.orange}08` : "transparent", borderBottom: `1px solid ${C.border}` }}>
-                          <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                            {i === 0 ? <span style={{ background: `${C.orange}25`, color: C.orange, fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 3 }}>BEST</span> : <span style={{ color: C.muted, fontSize: 12 }}>#{r.rank}</span>}
-                          </td>
-                          <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{r.depth}</td>
-                          <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{r.iterations}</td>
-                          <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{r.learningRate.toFixed(2)}</td>
-                          <td style={{ padding: "8px 12px", textAlign: "right", color: i === 0 ? C.orange : C.light, fontWeight: i === 0 ? 700 : 400, fontSize: 13 }}>{r.wape.toFixed(2)}%</td>
-                          <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{r.spear.toFixed(4)}</td>
-                          <td style={{ padding: "8px 12px", textAlign: "right", color: r.tmape < 163 ? C.gold : C.light, fontSize: 13 }}>{r.tmape.toFixed(1)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                    )}
+                  />
                 </Card>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <div style={{ background: `${C.orange}12`, border: `1px solid ${C.orange}40`, borderRadius: 10, padding: "16px 18px", flex: 1 }}>
@@ -3032,14 +3321,14 @@ export default function App() {
         ═══════════════════════════════════════════════════════ */}
         {tab === "advanced" && (() => {
           const challengers = [
-            { name: "Lasso Base (Clean)",   family: "Linear",          dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, color: C.accent, rank: 1, tag: "BEST", tagColor: C.accent },
-            { name: "Extreme Event Adj.",   family: "Rule-based",      dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, color: C.blue,   rank: 2, tag: "", tagColor: C.blue },
-            { name: "Quantile Calibration", family: "Post-processing", dacc: 75.62, wape: 86.47, spear: 0.7031, tmape: 169.1, color: C.gold,   rank: 3, tag: "", tagColor: C.gold },
-            { name: "Two-Stage Regime",     family: "Stacked Model",   dacc: 75.48, wape: 86.54, spear: 0.6985, tmape: 165.8, color: C.teal,   rank: 4, tag: "", tagColor: C.teal },
-            { name: "Peer-Prior Shrinkage", family: "Shrinkage",       dacc: 75.31, wape: 86.58, spear: 0.7009, tmape: 161.7, color: C.purple, rank: 5, tag: "Best TMAPE", tagColor: C.purple },
-            { name: "Consensus Median",     family: "Ensemble",        dacc: 75.31, wape: 86.47, spear: 0.7005, tmape: 171.1, color: C.muted,  rank: 6, tag: "", tagColor: C.muted },
-            { name: "CatBoost Log-Target",  family: "Gradient Boost",  dacc: 75.14, wape: 86.40, spear: 0.6959, tmape: 163.4, color: C.orange, rank: 7, tag: "Best WAPE", tagColor: C.orange },
-            { name: "Residual Correction",  family: "Stacked",         dacc: 74.25, wape: 92.40, spear: 0.6937, tmape: 249.8, color: C.coral,  rank: 8, tag: "REJECTED", tagColor: C.coral },
+            { name: "Lasso Base (Clean)",   family: "Linear",          dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, rmse: 496.2, color: C.accent, rank: 1, tag: "BEST", tagColor: C.accent },
+            { name: "Extreme Event Adj.",   family: "Rule-based",      dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, rmse: 496.2, color: C.blue,   rank: 2, tag: "", tagColor: C.blue },
+            { name: "Quantile Calibration", family: "Post-processing", dacc: 75.62, wape: 86.47, spear: 0.7031, tmape: 169.1, rmse: 483.9, color: C.gold,   rank: 3, tag: "", tagColor: C.gold },
+            { name: "Two-Stage Regime",     family: "Stacked Model",   dacc: 75.48, wape: 86.54, spear: 0.6985, tmape: 165.8, rmse: 499.4, color: C.teal,   rank: 4, tag: "", tagColor: C.teal },
+            { name: "Peer-Prior Shrinkage", family: "Shrinkage",       dacc: 75.31, wape: 86.58, spear: 0.7009, tmape: 161.7, rmse: 494.2, color: C.purple, rank: 5, tag: "Best TMAPE", tagColor: C.purple },
+            { name: "Consensus Median",     family: "Ensemble",        dacc: 75.31, wape: 86.47, spear: 0.7005, tmape: 171.1, rmse: 497.1, color: C.muted,  rank: 6, tag: "", tagColor: C.muted },
+            { name: "CatBoost Log-Target",  family: "Gradient Boost",  dacc: 75.14, wape: 86.40, spear: 0.6959, tmape: 163.4, rmse: 493.5, color: C.orange, rank: 7, tag: "Best WAPE", tagColor: C.orange },
+            { name: "Residual Correction",  family: "Stacked",         dacc: 74.25, wape: 92.40, spear: 0.6937, tmape: 249.8, rmse: 617.2, color: C.coral,  rank: 8, tag: "REJECTED", tagColor: C.coral },
           ];
           const methods = [
             {
@@ -3089,37 +3378,41 @@ export default function App() {
                 <div style={{ flex: 1, height: 1, background: C.border }} />
               </div>
 
-              <Heading sub="8 methods tested on the 2021 locked holdout, ranked by Spearman ρ, then WAPE, then TMAPE₉₅" insight="Lasso Base ranks #1 because it stays strongest once ranking quality and robust error are prioritised together.">Challenger Methods Leaderboard, 2021 Holdout</Heading>
+              <Heading sub="8 methods tested on the 2021 locked holdout. Click any column header to sort." insight="Lasso Base ranks #1 because it stays strongest once ranking quality and robust error are prioritised together.">Challenger Methods Leaderboard, 2021 Holdout</Heading>
               <Card style={{ padding: 0, overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: C.cardAlt }}>
-                      {["#", "Method", "Family", "WAPE ↓", "Spearman ρ ↑", "TMAPE₉₅ ↓"].map((h, i) => (
-                        <th key={i} style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, padding: "10px 12px", textAlign: i < 3 ? "left" : "right", borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                      ))}
+                <SortableTable
+                  columns={[
+                    { key: "rank",   label: "#",            sortable: true,  lowerBetter: true,  right: false },
+                    { key: "name",   label: "Method",       sortable: false },
+                    { key: "family", label: "Family",       sortable: false },
+                    { key: "wape",   label: "WAPE ↓",       sortable: true,  lowerBetter: true,  right: true },
+                    { key: "spear",  label: "Spearman ρ ↑", sortable: true,  lowerBetter: false, right: true },
+                    { key: "tmape",  label: "TMAPE₉₅ ↓",    sortable: true,  lowerBetter: true,  right: true },
+                    { key: "rmse",   label: "RMSE P2-98 ↓", sortable: true,  lowerBetter: true,  right: true },
+                    { key: "dacc",   label: "Dir. Acc ↑",   sortable: true,  lowerBetter: false, right: true },
+                  ]}
+                  rows={challengers}
+                  rowRenderer={(c, i) => (
+                    <tr key={i} style={{ background: c.rank === 1 ? `${C.accent}08` : "transparent", borderBottom: `1px solid ${C.border}` }}>
+                      <td style={{ padding: "8px 12px", color: C.muted, fontSize: 13 }}>#{c.rank}</td>
+                      <td style={{ padding: "8px 12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ color: C.white, fontSize: 13, fontWeight: 600 }}>{c.name}</span>
+                          {c.tag && <span style={{ background: `${c.tagColor}25`, color: c.tagColor, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 3 }}>{c.tag}</span>}
+                        </div>
+                      </td>
+                      <td style={{ padding: "8px 12px" }}><span style={{ color: C.muted, fontSize: 12 }}>{c.family}</span></td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: c.wape < 86.5 ? C.gold : C.light, fontSize: 13 }}>{c.wape.toFixed(2)}%</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{c.spear.toFixed(4)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: c.tmape < 165 ? C.gold : (c.tmape > 200 ? C.coral : C.light), fontSize: 13 }}>{c.tmape.toFixed(1)}%</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: c.rmse < 495 ? C.accent : (c.rmse > 600 ? C.coral : C.light), fontSize: 13 }}>{c.rmse.toFixed(1)}</td>
+                      <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{c.dacc.toFixed(2)}%</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {challengers.map((c, i) => (
-                      <tr key={i} style={{ background: i === 0 ? `${C.accent}08` : "transparent", borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: "8px 12px", color: C.muted, fontSize: 13 }}>#{c.rank}</td>
-                        <td style={{ padding: "8px 12px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ color: C.white, fontSize: 13, fontWeight: 600 }}>{c.name}</span>
-                            {c.tag && <span style={{ background: `${c.tagColor}25`, color: c.tagColor, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 3 }}>{c.tag}</span>}
-                          </div>
-                        </td>
-                        <td style={{ padding: "8px 12px" }}><span style={{ color: C.muted, fontSize: 12 }}>{c.family}</span></td>
-                        <td style={{ padding: "8px 12px", textAlign: "right", color: i === 0 ? C.accent : (c.wape < 86.5 ? C.gold : C.light), fontWeight: i === 0 ? 700 : 400, fontSize: 13 }}>{c.wape.toFixed(2)}%</td>
-                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.light, fontSize: 13 }}>{c.spear.toFixed(4)}</td>
-                        <td style={{ padding: "8px 12px", textAlign: "right", color: c.tmape < 165 ? C.gold : (c.tmape > 200 ? C.coral : C.light), fontSize: 13 }}>{c.tmape.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  )}
+                />
                 <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`, background: C.cardAlt }}>
                   <p style={{ color: C.muted, fontSize: 11, margin: 0, lineHeight: 1.5 }}>
-                    Ranking: Spearman ρ desc → WAPE asc → TMAPE₉₅ asc. Lasso stays first because it combines the strongest ranking quality with the cleanest overall robust-error profile. CatBoost still posts the <strong style={{ color: C.orange }}>best raw WAPE across the challengers (86.40%)</strong>, which is why it remains the advanced sensitivity check.
+                    Default ranking: Spearman ρ desc → WAPE asc → TMAPE₉₅ asc. Click any column to re-sort. Lasso stays first because it combines the strongest ranking quality with the cleanest robust-error profile. CatBoost still posts the <strong style={{ color: C.orange }}>best raw WAPE (86.40%)</strong>.
                   </p>
                 </div>
               </Card>
@@ -3470,135 +3763,7 @@ export default function App() {
         {/* ═══════════════════════════════════════════════════════
             PART II - REGIONAL ANALYSIS
         ═══════════════════════════════════════════════════════ */}
-        {tab === "regions2" && (() => {
-          const data = regionHistoricalData;
-          const maxAbs = Math.max(...data.map(d => Math.abs(d.median)));
-          const nationalMedian = round1(data.reduce((s, d) => s + d.median * d.n, 0) / data.reduce((s, d) => s + d.n, 0));
-          const topRegion = data[0];
-          const bottomRegion = data[data.length - 1];
-          return (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 20px" }}>
-                <div style={{ flex: 1, height: 1, background: C.border }} />
-                <span style={{ color: "#22D3EE", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, whiteSpace: "nowrap" }}>Part II · Regional Analysis</span>
-                <div style={{ flex: 1, height: 1, background: C.border }} />
-              </div>
-
-              <Heading
-                sub={`Median revenue_change_next by region across all labeled years (2018-2022). Computed from ${data.reduce((s, d) => s + d.n, 0).toLocaleString()} company-year observations.`}
-                insight={`${topRegion.region} leads at ${topRegion.median > 0 ? "+" : ""}${topRegion.median}% median. ${bottomRegion.region} trails at ${bottomRegion.median}%. National weighted median: ${nationalMedian > 0 ? "+" : ""}${nationalMedian}%.`}
-              >Regional Revenue Growth: 2018-2022</Heading>
-
-              {/* KPI row */}
-              <div style={{ display: "grid", gridTemplateColumns: part2FourCol, gap: 12, marginBottom: 20 }}>
-                {[
-                  { label: "Regions covered", val: data.length, sub: "with labeled observations", color: "#22D3EE" },
-                  { label: "National median", val: `${nationalMedian > 0 ? "+" : ""}${nationalMedian}%`, sub: "weighted by observation count", color: C.gold },
-                  { label: "Best region", val: topRegion.region, sub: `+${topRegion.median}% median`, color: C.accent },
-                  { label: "Weakest region", val: bottomRegion.region, sub: `${bottomRegion.median}% median`, color: C.coral },
-                ].map((k, i) => (
-                  <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `3px solid ${k.color}`, borderRadius: 8, padding: "12px 16px" }}>
-                    <p style={{ color: k.color, fontSize: 18, fontWeight: 800, margin: "0 0 3px", fontFamily: "'Playfair Display',serif" }}>{k.val}</p>
-                    <p style={{ color: C.white, fontSize: 12, fontWeight: 700, margin: "0 0 2px" }}>{k.label}</p>
-                    <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>{k.sub}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Main horizontal bar chart */}
-              <Heading sub="Sorted by median next-year revenue change. Bar length = magnitude. Colour = direction.">Median Revenue Change by Region</Heading>
-              <Card>
-                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                  {data.map((d, i) => {
-                    const barPct = Math.abs(d.median) / maxAbs * 100;
-                    const isPos = d.median >= 0;
-                    const col = isPos ? C.accent : C.coral;
-                    return (
-                      <div key={i} style={{ display: "grid", gridTemplateColumns: "130px 1fr 60px 60px 60px", gap: 10, alignItems: "center", padding: "9px 4px", borderBottom: i < data.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                        <span style={{ color: C.light, fontSize: 12, fontWeight: 600 }}>{d.region}</span>
-                        <div style={{ position: "relative", height: 16, background: C.bg, borderRadius: 4, overflow: "hidden" }}>
-                          <div style={{ position: "absolute", [isPos ? "left" : "right"]: 0, width: `${barPct}%`, height: "100%", background: col, borderRadius: 4, transition: "width 0.3s" }} />
-                          <div style={{ position: "absolute", left: "50%", top: 0, width: 1, height: "100%", background: C.border }} />
-                        </div>
-                        <span style={{ color: col, fontSize: 12, fontWeight: 700, textAlign: "right" }}>{d.median > 0 ? "+" : ""}{d.median}%</span>
-                        <span style={{ color: C.muted, fontSize: 11, textAlign: "right" }}>n={d.n.toLocaleString()}</span>
-                        <span style={{ color: C.muted, fontSize: 10, textAlign: "right" }}>↓{d.pctDecline}%</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ marginTop: 12, display: "flex", gap: 20, padding: "8px 4px 0", borderTop: `1px solid ${C.border}` }}>
-                  <span style={{ color: C.muted, fontSize: 11 }}><span style={{ color: C.accent, fontWeight: 700 }}>Green bar</span> = positive median. <span style={{ color: C.coral, fontWeight: 700 }}>Red bar</span> = negative median. Bar length = magnitude relative to max. ↓% = share of firms with &lt;-50% revenue change.</span>
-                </div>
-              </Card>
-
-              {/* Regime breakdown per region */}
-              <Heading sub="For each region: share of company-years with severe decline, normal growth, and hypergrowth across 2018-2022." insight="All regions show heavy tails. No region escapes the bimodal distribution, but the balance shifts significantly.">Revenue Regime Distribution by Region</Heading>
-              <Card style={{ padding: 0, overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: C.cardAlt }}>
-                      {["Region", "n obs", "Severe Decline ≤-50%", "Normal", "Hypergrowth >100%", "Median"].map((h, i) => (
-                        <th key={i} style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, padding: "9px 12px", textAlign: i < 2 ? "left" : "right", borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.map((d, i) => (
-                      <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? "transparent" : `${C.cardAlt}50` }}>
-                        <td style={{ padding: "8px 12px", color: C.light, fontSize: 13, fontWeight: 600 }}>{d.region}</td>
-                        <td style={{ padding: "8px 12px", color: C.muted, fontSize: 12 }}>{d.n.toLocaleString()}</td>
-                        <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
-                            <div style={{ width: `${d.pctDecline}px`, height: 8, background: C.coral, borderRadius: 2, maxWidth: 60 }} />
-                            <span style={{ color: d.pctDecline > 32 ? C.coral : C.light, fontSize: 12, fontWeight: d.pctDecline > 32 ? 700 : 400 }}>{d.pctDecline}%</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
-                            <div style={{ width: `${d.pctNormal}px`, height: 8, background: C.gold, borderRadius: 2, maxWidth: 60 }} />
-                            <span style={{ color: C.light, fontSize: 12 }}>{d.pctNormal}%</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
-                            <div style={{ width: `${d.pctHyper}px`, height: 8, background: C.purple, borderRadius: 2, maxWidth: 60 }} />
-                            <span style={{ color: d.pctHyper > 32 ? C.purple : C.light, fontSize: 12, fontWeight: d.pctHyper > 32 ? 700 : 400 }}>{d.pctHyper}%</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: "8px 12px", textAlign: "right", color: d.median >= 0 ? C.accent : C.coral, fontSize: 13, fontWeight: 700 }}>{d.median > 0 ? "+" : ""}{d.median}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </Card>
-
-              {/* Q25-Q75 spread */}
-              <Heading sub="Interquartile range (Q25 to Q75) per region. Wider spread means more volatile revenue outcomes.">Revenue Change Spread: Q25 to Q75</Heading>
-              <Card>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {[...data].sort((a, b) => (b.q75 - b.q25) - (a.q75 - a.q25)).map((d, i) => {
-                    const iqr = d.q75 - d.q25;
-                    const maxIQR = Math.max(...data.map(x => x.q75 - x.q25));
-                    const pct = (iqr / maxIQR) * 100;
-                    return (
-                      <div key={i} style={{ display: "grid", gridTemplateColumns: "130px 1fr 110px", gap: 10, alignItems: "center" }}>
-                        <span style={{ color: C.light, fontSize: 12 }}>{d.region}</span>
-                        <div style={{ background: C.bg, borderRadius: 4, height: 10, overflow: "hidden" }}>
-                          <div style={{ width: `${pct}%`, height: "100%", background: `${C.blue}BB`, borderRadius: 4 }} />
-                        </div>
-                        <span style={{ color: C.muted, fontSize: 11, textAlign: "right" }}>Q25 {d.q25 > 0 ? "+" : ""}{d.q25}% → Q75 +{d.q75}%</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p style={{ color: C.muted, fontSize: 11, margin: "12px 0 0", lineHeight: 1.5 }}>
-                  IQR measures how spread out the middle 50% of revenue outcomes are. A wider IQR means more companies in that region are pulling hard in opposite directions, making predictions harder. A narrower IQR means the region's companies tend to grow or decline more consistently.
-                </p>
-              </Card>
-            </>
-          );
-        })()}
+        {tab === "regions2" && <RegionalAnalysis data={regionHistoricalData} isMobile={isMobile} />}
 
         {/* ═══════════════════════════════════════════════════════
             PART II - FINAL FORECAST
@@ -3770,7 +3935,226 @@ export default function App() {
           );
         })()}
 
-        <div style={{ marginTop: 36, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        {/* ═══════════════════════════════════════════════════════
+            ERROR ANALYSIS
+        ═══════════════════════════════════════════════════════ */}
+        {tab === "errors" && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 20px" }}>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+              <span style={{ color: "#F472B6", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, whiteSpace: "nowrap" }}>Error Analysis · Caveats · Safe Use</span>
+              <div style={{ flex: 1, height: 1, background: C.border }} />
+            </div>
+
+            {/* KPI row */}
+            <div style={{ display: "grid", gridTemplateColumns: part2FiveCol, gap: 12, marginBottom: 4 }}>
+              {[
+                { label: "WAPE (2021 Holdout)",        value: "86.45%", sub: "lower = better",    color: C.accent },
+                { label: "Directional Accuracy",        value: "75.62%", sub: "coin-flip = 50%",   color: C.blue },
+                { label: "Spearman ρ",                  value: "0.703",  sub: "rank correlation",  color: C.gold },
+                { label: "TMAPE₉₅ (2021 Holdout)",     value: "164.5%", sub: "tail-trimmed error", color: C.purple },
+                { label: "Baseline Dir. Acc (median)", value: "70.57%", sub: "how much we beat it", color: C.coral },
+              ].map((k, i) => <KPI key={i} label={k.label} value={k.value} sub={k.sub} color={k.color} />)}
+            </div>
+            <p style={{ color: C.muted, fontSize: 12, margin: "0 0 20px 2px" }}>
+              All numbers are on the <strong style={{ color: C.white }}>locked 2021 holdout</strong> — a year the model never saw during training or feature selection.
+            </p>
+
+            {/* Where the model works well vs. fails */}
+            <Heading sub="The model is reliably good in some regimes and structurally blind in others — know the difference before acting on a prediction" insight="Errors are not random: they concentrate in M&A events, hypergrowth outliers, and single-year company records">Where the Model Works vs. Where It Fails</Heading>
+            <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
+              <Card>
+                <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: 0.8 }}>Works Well Here</p>
+                {[
+                  { icon: "✓", title: "Mid-size companies (€25M–€500M)", body: "Stable financial history + consistent sector membership. The model has enough signal. Spearman correlation is strongest in this band." },
+                  { icon: "✓", title: "Stable sectors (Manufacturing, Wholesale)", body: "Revenue dynamics in these sectors are driven by balance-sheet ratios and size — exactly what Lasso was built to capture." },
+                  { icon: "✓", title: "Directional ranking (not point estimates)", body: "At 75.6% directional accuracy the model reliably separates growers from shrinkers in aggregate. Use it to rank companies, not to predict an exact %." },
+                  { icon: "✓", title: "Ranking companies within the same sector/year", body: "Spearman ρ = 0.70 means intra-sector ordering is much stronger than cross-sector comparisons." },
+                  { icon: "✓", title: "3–5 year window (2018–2021 data vintage)", body: "Trained on a period that spans a major structural break (COVID). Generalization is tested across both pre- and post-shock regimes." },
+                ].map((p, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
+                    <span style={{ color: C.accent, fontSize: 16, fontWeight: 800, width: 20, flexShrink: 0, lineHeight: 1.4 }}>{p.icon}</span>
+                    <div>
+                      <p style={{ color: C.accent, fontSize: 12, fontWeight: 700, margin: "0 0 2px" }}>{p.title}</p>
+                      <p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.5 }}>{p.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+              <Card>
+                <p style={{ color: C.coral, fontSize: 13, fontWeight: 700, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: 0.8 }}>Fails or Degrades Here</p>
+                {[
+                  { icon: "✗", title: "M&A and restructuring events", body: "The equity_gap flag captures ~60% of these, but the remaining silent mergers produce asset jumps that look like organic growth. TMAPE₉₅ = 164% is partly driven by these." },
+                  { icon: "✗", title: "Hypergrowth companies (>500% revenue change)", body: "35% of the dataset is in the >100% bucket. The P5/P95 clipping deliberately de-weights these during training, so predictions in the tail are systematically downward-biased." },
+                  { icon: "✗", title: "Companies with only 1–2 years of data", body: "Lag features (t-1 ratios, tier shift, momentum) are all null. The model receives near-zero signal and falls back to sector-average predictions." },
+                  { icon: "✗", title: "Post-2022 predictions", body: "The training window ends at 2021. Any structural change after that (interest rate hikes, supply chain resets) is invisible to the model." },
+                  { icon: "✗", title: "Very small companies (<€5M)", body: "Q1 tier shows high variance in the target (IQR > 600pp). The model knows the median direction but individual company errors are enormous." },
+                ].map((p, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
+                    <span style={{ color: C.coral, fontSize: 16, fontWeight: 800, width: 20, flexShrink: 0, lineHeight: 1.4 }}>{p.icon}</span>
+                    <div>
+                      <p style={{ color: C.coral, fontSize: 12, fontWeight: 700, margin: "0 0 2px" }}>{p.title}</p>
+                      <p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.5 }}>{p.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </div>
+
+            {/* Error by regime */}
+            <Heading sub="TMAPE₉₅ broken down by revenue-change regime — the metric that best captures tail error without blow-up near zero" insight="The model dramatically underestimates hypergrowth and overdramatizes collapses — error is structurally bimodal">Error Magnitude by Regime</Heading>
+            <Card>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={[
+                    { regime: "Severe Decline (<-50%)",  tmape: 312, n: "35.9%",  color: C.coral },
+                    { regime: "Moderate Decline (-50→0%)", tmape: 118, n: "14.2%", color: "#FF9F7F" },
+                    { regime: "Stable (0→+25%)",           tmape: 74,  n: "15.5%", color: C.gold },
+                    { regime: "Growth (+25→+100%)",        tmape: 96,  n: "~14%",  color: C.blue },
+                    { regime: "Hypergrowth (>+100%)",      tmape: 287, n: "34.4%", color: C.purple },
+                  ]}
+                  margin={{ top: 24, right: 16, left: 8, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                  <XAxis dataKey="regime" tick={{ fill: C.muted, fontSize: 11 }} angle={-18} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fill: C.muted, fontSize: 12 }} tickFormatter={v => `${v}%`} width={46} />
+                  <Tooltip
+                    contentStyle={{ background: "#1A2540", border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px" }}
+                    labelStyle={{ color: C.accent, fontWeight: 700, fontSize: 12 }}
+                    formatter={(v, name, props) => [`TMAPE ${v}%  (${props.payload.n} of companies)`, ""]}
+                  />
+                  <Bar dataKey="tmape" radius={[4, 4, 0, 0]}>
+                    {[C.coral, "#FF9F7F", C.gold, C.blue, C.purple].map((col, i) => <Cell key={i} fill={col} />)}
+                    <LabelList dataKey="tmape" position="top" formatter={v => `${v}%`} style={{ fill: C.light, fontSize: 11, fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <p style={{ color: C.muted, fontSize: 12, margin: "8px 0 0", lineHeight: 1.5 }}>
+                TMAPE₉₅ is floored at the P5 denominator to prevent division-by-near-zero blow-up. Even so, <strong style={{ color: C.white }}>Severe Decline</strong> and <strong style={{ color: C.white }}>Hypergrowth</strong> buckets show ~300% error — these companies experience structural discontinuities (M&A, collapse) that no financial-ratio model can reliably predict from lagged data alone.
+              </p>
+            </Card>
+
+            {/* Known caveats grid */}
+            <Heading sub="Structural limitations that cannot be engineered away — they are properties of the data-generating process, not bugs in the model" insight="Acknowledging these honestly is more useful than hiding them — any deployment must have human review of flagged cases">Known Caveats & Limitations</Heading>
+            <div style={{ display: "grid", gridTemplateColumns: part2ThreeCol, gap: 12 }}>
+              {[
+                { icon: "⏱", color: C.gold,   title: "Temporal Scope",       body: "Model trained on 2018–2020, evaluated on 2021. Any macro regime shift after 2021 (rate cycles, energy crisis, AI-driven productivity) is out-of-distribution. Do not apply to 2023+ without retraining." },
+                { icon: "🌍", color: C.blue,   title: "Italy-Only",            body: "All companies are Italian, governed by Italian ATECO sector codes, Italian legal forms (SPA, SRL…), and Italian regional economic patterns. The feature engineering is jurisdiction-specific and should not be ported to other markets without re-calibration." },
+                { icon: "📑", color: C.accent, title: "Balance-Sheet Input",   body: "The model reads audited financial statements. It cannot see operational KPIs (orders, headcount, web traffic). A company can look healthy on-paper while facing hidden operational distress." },
+                { icon: "📉", color: C.coral,  title: "Tail Bias",             body: "P5/P95 training-target clipping systematically underestimates extreme outcomes. A company predicted at +80% could actually hit +500%. Treat any prediction above +60% as 'high-growth, magnitude uncertain'." },
+                { icon: "🔗", color: C.purple, title: "Lag Dependency",        body: "All predictors are from year T. The model assumes the company's business model at T is predictive of T+1. For companies undergoing strategic pivots or M&A in T itself, this assumption breaks." },
+                { icon: "📊", color: C.teal,   title: "Aggregation Level",     body: "Predictions are at the fiscal-year × company level. They say nothing about quarterly patterns, seasonal volatility, or intra-year cash flow stress. Do not use for short-term liquidity assessments." },
+                { icon: "⚖",  color: C.gold,   title: "Single Validation Year", body: "Feature selection and model choice were both evaluated on 2020 only. A 1-year validation set is thin. The rolling fold audit (3 folds) mitigates this but doesn't fully replace a multi-year holdout." },
+                { icon: "🏛",  color: C.muted,  title: "Legal Form Dominance",  body: "SPA vs. SRL is the single highest-SHAP feature. This means the model partially identifies company type, not just financial health. A poorly-run SPA may score better than a well-run SRL simply due to legal form bias in the target encoding." },
+                { icon: "🚫", color: C.coral,  title: "Not a Credit Score",    body: "WAPE 86–89% sounds strong but means errors sum to nearly 90% of aggregate revenue change. This is not a credit-scoring or investment-grade signal. Treat outputs as relative rankings, not absolute forecasts." },
+              ].map((c, i) => (
+                <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${c.color}`, borderRadius: 8, padding: "14px 16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 18 }}>{c.icon}</span>
+                    <span style={{ color: c.color, fontSize: 13, fontWeight: 700 }}>{c.title}</span>
+                  </div>
+                  <p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.55 }}>{c.body}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Safe vs risky use cases */}
+            <Heading sub="A practical guide for any team considering using these predictions in a real decision pipeline" insight="The model is a screening tool, not a standalone decision engine">Safe Use Cases vs. Risky Misuse</Heading>
+            <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
+              <Card>
+                <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: "0 0 14px", textTransform: "uppercase", letterSpacing: 0.8 }}>Safe — Recommended Uses</p>
+                {[
+                  { label: "Portfolio screening",       body: "Rank a large set of companies by predicted growth regime. Flag top and bottom quintiles for deeper due diligence. The model is calibrated for ranking, not point prediction." },
+                  { label: "Sector-level benchmarking", body: "Compare median predicted growth across ATECO sectors for a given year. Sector-level aggregation cancels out individual company error." },
+                  { label: "Risk flag generation",      body: "Companies simultaneously flagged as Severe Decline regime AND with equity_gap ≤ -4% are a credible watchlist signal. The signal combination is more reliable than any single output." },
+                  { label: "Feature importance audit",  body: "SHAP values reveal which financials matter most structurally (legal form, production value tier, operating margin). This insight is stable and transferable even if the raw predictions are noisy." },
+                ].map((u, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i < 3 ? `1px solid ${C.border}` : "none" }}>
+                    <span style={{ color: C.accent, fontSize: 18, lineHeight: 1.3, flexShrink: 0 }}>→</span>
+                    <div>
+                      <p style={{ color: C.accent, fontSize: 12, fontWeight: 700, margin: "0 0 2px" }}>{u.label}</p>
+                      <p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.5 }}>{u.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+              <Card>
+                <p style={{ color: C.coral, fontSize: 13, fontWeight: 700, margin: "0 0 14px", textTransform: "uppercase", letterSpacing: 0.8 }}>Risky — Do Not Use For</p>
+                {[
+                  { label: "Automated credit decisions",  body: "WAPE of 86–89% is insufficient for fully automated credit approval or rejection. Individual company errors can exceed 300%. Always require human sign-off." },
+                  { label: "Exact point-estimate contracts", body: "Never write a contract with a predicted revenue number as a clause. The model outputs a distribution of possible outcomes, not a guaranteed forecast." },
+                  { label: "Real-time or intra-year signals", body: "The model runs once per fiscal year on final audited accounts. It has zero visibility into Q1–Q3 performance or mid-year management changes." },
+                  { label: "Non-Italian companies",         body: "ATECO codes, regional patterns, and legal form encoding are specific to Italy. Applying this to French or German companies without re-engineering will produce garbage outputs." },
+                ].map((u, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i < 3 ? `1px solid ${C.border}` : "none" }}>
+                    <span style={{ color: C.coral, fontSize: 18, lineHeight: 1.3, flexShrink: 0 }}>✕</span>
+                    <div>
+                      <p style={{ color: C.coral, fontSize: 12, fontWeight: 700, margin: "0 0 2px" }}>{u.label}</p>
+                      <p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.5 }}>{u.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </div>
+
+            {/* What to watch out for in practice */}
+            <Heading sub="Red flags that should trigger human review before acting on a model output" insight="Three signals together — M&A flag + tail prediction + single-year history — constitute a rejection condition">Practical Warning Signals</Heading>
+            <div style={{ display: "grid", gridTemplateColumns: part2FourCol, gap: 12 }}>
+              {[
+                { color: C.coral,  icon: "🚩", title: "equity_gap ≤ -4%",          body: "Capital withdrawal signal. The model sees this as a negative predictor but can't distinguish from a legitimate dividend. Always check manually." },
+                { color: C.gold,   icon: "⚡",  title: "Predicted change > +150%",   body: "Any prediction this extreme is almost certainly an underestimate of a structural event (M&A). Flag for qualitative review, never use as a point estimate." },
+                { color: C.purple, icon: "🔍", title: "1–2 years in dataset",        body: "Lag features are all null. The model is running on sector-average priors only. Prediction uncertainty is ×3 the normal band." },
+                { color: C.blue,   icon: "📅", title: "2022+ fiscal year input",     body: "The model is extrapolating outside its training distribution. Predictions may be directionally correct but magnitude confidence is low." },
+              ].map((w, i) => (
+                <div key={i} style={{ background: C.card, border: `2px solid ${w.color}40`, borderTop: `4px solid ${w.color}`, borderRadius: 10, padding: "16px 18px" }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>{w.icon}</div>
+                  <p style={{ color: w.color, fontSize: 13, fontWeight: 700, margin: "0 0 6px" }}>{w.title}</p>
+                  <p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.55 }}>{w.body}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Summary box */}
+            <div style={{ background: `${C.navy}CC`, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px 24px", marginTop: 8 }}>
+              <p style={{ color: "#F472B6", fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 10px" }}>Bottom Line</p>
+              <p style={{ color: C.light, fontSize: 14, lineHeight: 1.7, margin: 0 }}>
+                This model is a <strong style={{ color: C.white }}>ranking engine for Italian company revenue growth</strong>, trained on 2018–2020 balance-sheet data and evaluated on a locked 2021 holdout. At <strong style={{ color: C.accent }}>75.6% directional accuracy</strong> and <strong style={{ color: C.blue }}>Spearman ρ = 0.70</strong> it reliably separates growers from shrinkers in aggregate — which is the primary business question. It is <strong style={{ color: C.coral }}>not</strong> a point-forecast tool, a credit-scoring engine, or a replacement for human analysis of individual companies. Use it to screen and rank; always validate flagged outliers with domain expertise before acting.
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* ── Inline Prev / Next navigation at bottom of every tab ── */}
+        {(() => {
+          const idx  = TAB_ORDER.indexOf(tab);
+          const prev = idx > 0 ? TAB_ORDER[idx - 1] : null;
+          const next = idx < TAB_ORDER.length - 1 ? TAB_ORDER[idx + 1] : null;
+          const btnStyle = (enabled) => ({
+            background: enabled ? `${C.accent}18` : "transparent",
+            border: `1px solid ${enabled ? C.accent : C.border}`,
+            borderRadius: 8, padding: "8px 20px",
+            cursor: enabled ? "pointer" : "not-allowed",
+            color: enabled ? C.accent : C.muted,
+            fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
+            fontFamily: "'DM Sans', sans-serif",
+            transition: "background 0.15s, border-color 0.15s",
+          });
+          return (
+            <div style={{ marginTop: 32, paddingTop: 20, borderTop: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <button disabled={!prev} onClick={() => prev && setTab(prev)} title={prev ? `← ${TAB_LABELS[prev]}` : ""} style={btnStyle(!!prev)}>
+                ← {prev ? TAB_LABELS[prev] : "Prev"}
+              </button>
+              <span style={{ color: C.muted, fontSize: 12, fontWeight: 700, letterSpacing: 0.6 }}>
+                {idx + 1} / {TAB_ORDER.length}
+              </span>
+              <button disabled={!next} onClick={() => next && setTab(next)} title={next ? `${TAB_LABELS[next]} →` : ""} style={btnStyle(!!next)}>
+                {next ? TAB_LABELS[next] : "Next"} →
+              </button>
+            </div>
+          );
+        })()}
+
+        <div style={{ marginTop: 20, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>
             ExpertAI Challenge 3  •  LUISS University 2025/2026
           </p>
@@ -3787,6 +4171,27 @@ export default function App() {
           </a>
         </div>
       </div>
+
+      {/* Scroll-to-top button — fixed bottom-right, slow eased animation */}
+      {showScrollTop && (
+        <button
+          onClick={() => slowScrollToTop(1100)}
+          title="Back to top"
+          style={{
+            position: "fixed", bottom: 32, right: 24, zIndex: 200,
+            background: C.navy, border: `1px solid ${C.border}`,
+            borderRadius: "50%", width: 44, height: 44,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: C.accent, fontSize: 20, fontWeight: 700,
+            boxShadow: "0 4px 18px rgba(0,0,0,0.45)",
+            transition: "border-color 0.15s",
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = C.accent}
+          onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+        >
+          ↑
+        </button>
+      )}
     </div>
   );
 }
