@@ -1,0 +1,114 @@
+{
+  "_info": "Generated from revenue_change_notebook.ipynb. Re-run the export block at the end of the notebook to update these values after retraining.",
+  "_generated": "2025-05-05",
+  "_train_window": "2018-2022",
+  "_test_year": "2023",
+  "_forecast_year": "2024",
+
+  "models": [
+    { "name": "Lasso",            "group": "linear",   "features": 49, "dacc": 74.5225, "spear": 0.6841, "rmse": 494.7, "tag": "BEST OVERALL" },
+    { "name": "ElasticNet",       "group": "linear",   "features": 49, "dacc": 74.5225, "spear": 0.6838, "rmse": 495.1, "tag": "" },
+    { "name": "LinearRegression", "group": "linear",   "features": 49, "dacc": 74.6248, "spear": 0.6829, "rmse": 495.0, "tag": "Best Dir." },
+    { "name": "Ridge",            "group": "linear",   "features": 49, "dacc": 74.4884, "spear": 0.6836, "rmse": 495.3, "tag": "" },
+    { "name": "RandomForest",     "group": "advanced", "features": 49, "dacc": 74.4543, "spear": 0.6736, "rmse": 509.4, "tag": "" },
+    { "name": "CatBoost",         "group": "advanced", "features": 49, "dacc": 74.2838, "spear": 0.6749, "rmse": 501.8, "tag": "Best Tree" },
+    { "name": "LightGBM",         "group": "advanced", "features": 49, "dacc": 73.8745, "spear": 0.6634, "rmse": 511.5, "tag": "" },
+    { "name": "XGBoost",          "group": "advanced", "features": 49, "dacc": 73.8745, "spear": 0.6595, "rmse": 514.7, "tag": "" },
+    { "name": "BaselineMedian",   "group": "baseline", "features": 49, "dacc": 70.5662, "spear": 0.5689, "rmse": 549.3, "tag": "Baseline" }
+  ],
+
+  "stability": [
+    { "shortFold": "2018→19",    "dacc": 72.9364, "spear": 0.6359, "wape": 92.82, "tmape": 156.9, "n": 41 },
+    { "shortFold": "2018-19→20", "dacc": 74.5225, "spear": 0.6841, "wape": 88.71, "tmape": 166.7, "n": 49 },
+    { "shortFold": "18-20→21",   "dacc": 75.6173, "spear": 0.7031, "wape": 86.45, "tmape": 164.5, "n": 49 }
+  ],
+
+  "tuningRows": [
+    { "depth": 6, "iterations": 300, "learningRate": 0.03, "wape": 88.69, "spear": 0.6801, "tmape": 161.7, "rmse": 501.8, "rank": 1 },
+    { "depth": 6, "iterations": 300, "learningRate": 0.05, "wape": 88.89, "spear": 0.6805, "tmape": 163.4, "rmse": 503.4, "rank": 2 },
+    { "depth": 4, "iterations": 300, "learningRate": 0.05, "wape": 88.89, "spear": 0.6802, "tmape": 165.8, "rmse": 504.2, "rank": 3 },
+    { "depth": 4, "iterations": 500, "learningRate": 0.05, "wape": 89.01, "spear": 0.6794, "tmape": 167.4, "rmse": 506.8, "rank": 4 },
+    { "depth": 4, "iterations": 700, "learningRate": 0.03, "wape": 88.77, "spear": 0.6793, "tmape": 166.2, "rmse": 505.6, "rank": 5 },
+    { "depth": 6, "iterations": 500, "learningRate": 0.03, "wape": 88.81, "spear": 0.6772, "tmape": 168.4, "rmse": 509.1, "rank": 6 },
+    { "depth": 4, "iterations": 300, "learningRate": 0.03, "wape": 88.82, "spear": 0.6805, "tmape": 163.4, "rmse": 504.8, "rank": 7 },
+    { "depth": 6, "iterations": 700, "learningRate": 0.03, "wape": 89.33, "spear": 0.6762, "tmape": 170.1, "rmse": 512.5, "rank": 8 },
+    { "depth": 6, "iterations": 500, "learningRate": 0.05, "wape": 89.01, "spear": 0.6772, "tmape": 168.4, "rmse": 508.3, "rank": 9 }
+  ],
+
+  "clippingData": [
+    { "label": "No Clip",        "clip": "None",            "wape": 88.82, "tmape": 173.0, "note": "Extreme events dominate loss" },
+    { "label": "P2-P98",         "clip": "(0.02, 0.98)",    "wape": 88.73, "tmape": 169.9, "note": "Mild trim, small improvement" },
+    { "label": "P5-P95 ✓",      "clip": "(0.05, 0.95)",    "wape": 88.71, "tmape": 166.7, "note": "Optimal, selected" },
+    { "label": "+ Pred. Winsor", "clip": "P5-P95 + P2-P98", "wape": 89.27, "tmape": 166.6, "note": "Hurts WAPE, rejected" }
+  ],
+
+  "challengers": [
+    { "name": "Lasso Base (Clean)",   "family": "Linear",          "dacc": 75.62, "wape": 86.45, "spear": 0.7031, "tmape": 164.5, "rmse": 496.2, "rank": 1, "tag": "BEST" },
+    { "name": "Extreme Event Adj.",   "family": "Rule-based",      "dacc": 75.62, "wape": 86.45, "spear": 0.7031, "tmape": 164.5, "rmse": 496.2, "rank": 2, "tag": "" },
+    { "name": "Quantile Calibration", "family": "Post-processing", "dacc": 75.62, "wape": 86.47, "spear": 0.7031, "tmape": 169.1, "rmse": 483.9, "rank": 3, "tag": "" },
+    { "name": "Two-Stage Regime",     "family": "Stacked Model",   "dacc": 75.48, "wape": 86.54, "spear": 0.6985, "tmape": 165.8, "rmse": 499.4, "rank": 4, "tag": "" },
+    { "name": "Peer-Prior Shrinkage", "family": "Shrinkage",       "dacc": 75.31, "wape": 86.58, "spear": 0.7009, "tmape": 161.7, "rmse": 494.2, "rank": 5, "tag": "Best TMAPE" },
+    { "name": "Consensus Median",     "family": "Ensemble",        "dacc": 75.31, "wape": 86.47, "spear": 0.7005, "tmape": 171.1, "rmse": 497.1, "rank": 6, "tag": "" },
+    { "name": "CatBoost Log-Target",  "family": "Gradient Boost",  "dacc": 75.14, "wape": 86.40, "spear": 0.6959, "tmape": 163.4, "rmse": 493.5, "rank": 7, "tag": "Best WAPE" },
+    { "name": "Residual Correction",  "family": "Stacked",         "dacc": 74.25, "wape": 92.40, "spear": 0.6937, "tmape": 249.8, "rmse": 617.2, "rank": 8, "tag": "REJECTED" }
+  ],
+
+  "finalAudit": [
+    { "label": "2022→2023 Lasso (Clean Base)",     "model": "Lasso",    "dacc": 74.16, "spear": 0.6780, "tmape": 169.9, "wape": 87.3, "smape": 108.3, "tag": "PRIMARY" },
+    { "label": "2022→2023 CatBoost (Sensitivity)", "model": "CatBoost", "dacc": 73.64, "spear": 0.6712, "tmape": 172.1, "wape": 88.6, "smape": 109.1, "tag": "TRANSFER CHECK" }
+  ],
+
+  "finalAuditKPIs": [
+    { "label": "Rows Audited",         "val": "2,895",  "sub": "Italian companies with 2022 financials" },
+    { "label": "Directional Accuracy", "val": "74.16%", "sub": "Lasso clean base on 2023 actual labels" },
+    { "label": "Spearman ρ",           "val": "0.6780", "sub": "Ranking quality of growth predictions" },
+    { "label": "TMAPE₉₅ Coverage",     "val": "169.89%","sub": "Slightly wider than 2021 holdout, expected on new data" }
+  ],
+
+  "pred2024": [
+    { "pct": "<-50%",   "pct_val": 28.2, "label": "Severe Decline" },
+    { "pct": "-50:0%",  "pct_val": 21.4, "label": "Mild Decline" },
+    { "pct": "0:50%",   "pct_val": 12.8, "label": "Stable Growth" },
+    { "pct": "50:100%", "pct_val": 8.4,  "label": "Strong Growth" },
+    { "pct": ">100%",   "pct_val": 29.2, "label": "Hypergrowth" }
+  ],
+
+  "pred2024Summary": {
+    "firms_scored": "2,895",
+    "mean_predicted_change": "+117.5%",
+    "median_predicted_change": "+1.6%",
+    "train_window": "2018-2022",
+    "source_year": "2023 financials",
+    "primary_model": "Lasso clean base"
+  },
+
+  "stabilityFull": [
+    { "fold": "18→19",    "dacc": 72.94, "spear": 0.636 },
+    { "fold": "18-19→20", "dacc": 74.52, "spear": 0.684 },
+    { "fold": "18-20→21", "dacc": 75.62, "spear": 0.703 },
+    { "fold": "18-21→22", "dacc": 75.62, "spear": 0.703 },
+    { "fold": "18-22→23", "dacc": 74.16, "spear": 0.678 }
+  ],
+
+  "lassoKPIs": {
+    "wape_validation": "88.71%",
+    "wape_holdout":    "86.45%",
+    "spearman_holdout":"0.703",
+    "dacc_holdout":    "75.62%",
+    "features":        "49",
+    "alpha":           "0.001"
+  },
+
+  "topFeatures": [
+    { "feature": "prev_revenue_change",      "importance": 0.26, "rank": 1, "category": "momentum" },
+    { "feature": "gross_margin_ratio",       "importance": 0.14, "rank": 2, "category": "profitability" },
+    { "feature": "equity_gap",               "importance": 0.12, "rank": 3, "category": "leverage" },
+    { "feature": "debt_to_assets",           "importance": 0.11, "rank": 4, "category": "leverage" },
+    { "feature": "current_ratio",            "importance": 0.09, "rank": 5, "category": "liquidity" },
+    { "feature": "legal_form_encoded",       "importance": 0.08, "rank": 6, "category": "structure" },
+    { "feature": "sector_median_growth",     "importance": 0.07, "rank": 7, "category": "sector" },
+    { "feature": "years_in_business",        "importance": 0.06, "rank": 8, "category": "maturity" },
+    { "feature": "region_median_growth",     "importance": 0.05, "rank": 9, "category": "region" },
+    { "feature": "production_value_log",     "importance": 0.04, "rank": 10,"category": "size" }
+  ]
+}

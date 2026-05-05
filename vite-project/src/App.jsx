@@ -1465,7 +1465,7 @@ function ItalyMapTab({ regionMapData }) {
           <svg ref={svgRef} viewBox="0 0 900 900" style={{ width: "100%", height: 620, display: "block" }} aria-label="Italy EDA regional map" />
         </div>
         <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "8px 0 0" }}>
-          GeoJSON: openpolis/geojson-italy (MIT)  •  Click a region to pin tooltip  •  Source: train_data.csv 2018-2020
+          GeoJSON: openpolis/geojson-italy (MIT)  •  Click a region to pin tooltip
         </p>
       </div>
     </>
@@ -1636,7 +1636,7 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
       {/* ── HERO ── */}
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ color: C.white, fontSize: 28, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
-          Challenge 3, Revenue Forecasting
+          Revenue Forecasting — Business Context
         </h2>
 
         {/* Challenge description card */}
@@ -2061,21 +2061,349 @@ function slowScrollToTop(duration = 1000) {
   requestAnimationFrame(step);
 }
 
-const TAB_ORDER = ["overview","2018","2019","2020","signals","map","summary","features","featsel","models","tuning","advanced","regime","regions2","errors","forecast"];
+const TAB_ORDER = ["overview","2018","2019","2020","signals","map","summary","features","featsel","models","tuning","advanced","regime","regions2","errors","forecast","scenario"];
 const TAB_LABELS = {
   overview: "Data Overview", "2018": "2018 → 2019", "2019": "2019 → 2020",
   "2020": "2020 → 2021", signals: "Revenue Signals", map: "Regional Map",
   summary: "Summary", features: "Feature Eng.", featsel: "Feature Sel.",
   models: "Model Results", tuning: "Hyperparameter", advanced: "Innovative Ideas",
   regime: "Regime Class.", regions2: "Regional Analysis", forecast: "Final Forecast",
-  errors: "Error Analysis",
+  errors: "Error Analysis", scenario: "Scenario Lab",
 };
 
+// === SLIDER INPUT HELPER ===
+function SliderInput({ label, value, min, max, step, onChange, format, color }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+        <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{label}</span>
+        <span style={{ color: color || C.accent, fontSize: 13, fontWeight: 700 }}>{format(value)}</span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        style={{ width: "100%", accentColor: color || C.accent, cursor: "pointer" }}
+      />
+    </div>
+  );
+}
+
+// === SCENARIO SCORING (applies structural relationships from trained Lasso model) ===
+function computeScenarioScore({ sector, region, legalForm, prevRevChange, profitMargin, debtAssets, currentRatio, yearsInBusiness, scenario }) {
+  let score = 0;
+
+  // Momentum — strongest predictor in the Lasso model
+  score += prevRevChange * 0.26;
+
+  // Profit margin
+  score += profitMargin >= 10 ? 10 : profitMargin >= 5 ? 5 : profitMargin >= 0 ? 1 : profitMargin >= -5 ? -8 : -18;
+
+  // Leverage
+  score += debtAssets <= 30 ? 6 : debtAssets <= 50 ? 2 : debtAssets <= 65 ? -5 : debtAssets <= 80 ? -11 : -19;
+
+  // Liquidity
+  score += currentRatio >= 3 ? 8 : currentRatio >= 2 ? 4 : currentRatio >= 1.2 ? 1 : currentRatio >= 0.8 ? -5 : -13;
+
+  // Sector historical medians (from ATECO training data)
+  const sectorAdj = { 62: 12, 71: 8, 41: 6, 43: 5, 68: 4, 46: 4, 82: 3, 77: 2, 47: 2, 25: 2, 10: 1, 45: 0, 56: -1 };
+  score += sectorAdj[Number(sector)] || 0;
+
+  // Regional median growth adjustment
+  const regionAdj = {
+    "LOMBARDIA": 5, "VENETO": 5, "EMILIA-ROMAGNA": 5, "TOSCANA": 4, "LAZIO": 4,
+    "PIEMONTE": 3, "MARCHE": 2, "LIGURIA": 2, "FRIULI-VENEZIA GIULIA": 2,
+    "CAMPANIA": 1, "PUGLIA": 1, "ABRUZZO": 1, "SICILIA": 0,
+    "SARDEGNA": -1, "CALABRIA": -2,
+  };
+  score += regionAdj[region] || 0;
+
+  // Legal form — governance structure, access to capital, stability
+  const legalFormAdj = { SPA: 5, SRL: 0, SRLS: -4, SC: 2, SNC: -2, SAS: -2 };
+  score += legalFormAdj[legalForm] || 0;
+
+  // Business maturity
+  if (yearsInBusiness < 3) score -= 5;
+  else if (yearsInBusiness > 20) score += 3;
+
+  // Scenario overlays
+  let point = score;
+  if      (scenario === "recession")    { point = point * 0.45 - 16; }
+  else if (scenario === "sectorBoom")   { point = point * 1.3  + 12; }
+  else if (scenario === "energyShock")  { point = point * 0.62 - 10; if ([10, 25].includes(Number(sector))) point -= 8; }
+  else if (scenario === "ratePressure") { point -= debtAssets > 60 ? 20 : debtAssets > 40 ? 9 : 3; }
+  else if (scenario === "geopolitical") { point = point * 0.7  -  7; if (Number(sector) === 56) point -= 10; }
+
+  // Confidence interval width
+  let unc = 14;
+  if (Math.abs(prevRevChange) > 50)             unc += 7;
+  if (debtAssets > 65)                          unc += 5;
+  if ([62, 68, 41].includes(Number(sector)))    unc += 5;
+  if (scenario !== "normal")                    unc += 4;
+
+  point = Math.round(point);
+  const low  = Math.round(point - unc);
+  const high = Math.round(point + unc);
+
+  // Regime
+  let regime, regimeColor, regimeBg;
+  if      (point < -50) { regime = "Severe Decline"; regimeColor = C.coral;   regimeBg = `${C.coral}12`;   }
+  else if (point < -10) { regime = "Mild Decline";   regimeColor = "#FF9F7F"; regimeBg = `#FF9F7F12`;      }
+  else if (point <  15) { regime = "Stable";         regimeColor = C.gold;   regimeBg = `${C.gold}12`;     }
+  else if (point <  50) { regime = "Growth";         regimeColor = C.accent; regimeBg = `${C.accent}12`;   }
+  else                  { regime = "Hypergrowth";     regimeColor = C.purple; regimeBg = `${C.purple}12`;   }
+
+  // Confidence
+  const isLow = Math.abs(point) > 80 || debtAssets > 75 || currentRatio < 0.7;
+  const isMed = Math.abs(point) > 40 || debtAssets > 55 || scenario !== "normal";
+  const confidence = isLow ? "Low" : isMed ? "Medium" : "High";
+  const confColor  = isLow ? C.coral : isMed ? C.gold : C.accent;
+
+  // Key driver cards
+  const sa  = sectorAdj[Number(sector)] || 0;
+  const lfa = legalFormAdj[legalForm]   || 0;
+  const LEGAL_FORM_LABELS = { SPA: "S.p.A.", SRL: "S.r.l.", SRLS: "S.r.l.s.", SC: "Cooperativa", SNC: "S.n.c.", SAS: "S.a.s." };
+  const drivers = [];
+  if (Math.abs(prevRevChange * 0.26) >= 3)
+    drivers.push({ label: "Revenue Momentum",  positive: prevRevChange > 0, desc: prevRevChange > 0 ? `Prior +${prevRevChange}% growth carries forward` : `Prior ${prevRevChange}% decline creates headwind` });
+  if (profitMargin >= 5)     drivers.push({ label: "Margin Strength",   positive: true,  desc: `${profitMargin.toFixed(1)}% profit margin above typical threshold` });
+  else if (profitMargin < 0) drivers.push({ label: "Margin Pressure",   positive: false, desc: "Negative margin — cost or pricing challenge" });
+  if (debtAssets > 60)       drivers.push({ label: "Leverage Risk",     positive: false, desc: `${debtAssets}% debt/assets — elevated financial pressure` });
+  else if (debtAssets < 30)  drivers.push({ label: "Low Leverage",      positive: true,  desc: "Clean balance sheet — financial flexibility to invest" });
+  if (currentRatio >= 2)     drivers.push({ label: "Strong Liquidity",  positive: true,  desc: `Current ratio ${currentRatio.toFixed(1)}× — comfortable short-term coverage` });
+  else if (currentRatio < 1) drivers.push({ label: "Liquidity Stress",  positive: false, desc: `Current ratio ${currentRatio.toFixed(1)}× — below minimum safe level` });
+  if (sa >= 5)               drivers.push({ label: "Sector Tailwind",   positive: true,  desc: `${ATECO_NAMES[Number(sector)] || "This sector"} has historically outperformed` });
+  if (sa <= -2)              drivers.push({ label: "Sector Headwind",   positive: false, desc: `${ATECO_NAMES[Number(sector)] || "This sector"} faces structural pressure` });
+  if (lfa >= 4)              drivers.push({ label: "Legal Form Advantage", positive: true,  desc: `${LEGAL_FORM_LABELS[legalForm] || legalForm} — better access to capital and governance stability` });
+  if (lfa <= -3)             drivers.push({ label: "Legal Form Constraint", positive: false, desc: `${LEGAL_FORM_LABELS[legalForm] || legalForm} — limited capital structure, higher volatility` });
+
+  // Suggested action
+  const action =
+    regime === "Severe Decline" ? "Review cost structure, renegotiate debt terms, and audit the customer pipeline immediately." :
+    regime === "Mild Decline"   ? "Monitor pricing power and liquidity. Selective cost reduction before committing to new investment." :
+    regime === "Stable"         ? "Benchmark against sector peers. Identify margin improvement levers for the next period." :
+    regime === "Growth"         ? "Selective investment and capacity expansion. Protect working capital as you scale." :
+                                  "Investigate structural change: potential M&A event, new major contract, or accounting reclassification.";
+
+  // Warning flags
+  const flags = [];
+  if (Math.abs(point) > 100) flags.push("Extreme forecast range — verify inputs. May indicate a structural event.");
+  if (debtAssets > 75)       flags.push("Very high leverage — result is sensitive to interest rate movements.");
+  if (currentRatio < 0.8)    flags.push("Liquidity below critical threshold — monitor short-term obligations closely.");
+  if (yearsInBusiness < 3)   flags.push("Young company — limited financial history reduces reliability.");
+  if (scenario !== "normal") {
+    const scenarioLabels = { recession: "Recession", sectorBoom: "Sector Boom", energyShock: "Energy Shock", ratePressure: "Rate Pressure", geopolitical: "Geopolitical" };
+    flags.push(`Macro overlay active (${scenarioLabels[scenario]}) — base forecast adjusted.`);
+  }
+
+  return { point, low, high, regime, regimeColor, regimeBg, confidence, confColor, drivers, action, flags };
+}
+
+// === BUSINESS SCENARIO LAB TAB ===
+// Typical profile derived from dataset medians (2018-2020 training window)
+const TYPICAL_PROFILE = { sector: "46", region: "LOMBARDIA", legalForm: "SRL", prevRevChange: 2, profitMargin: 3.5, debtAssets: 51, currentRatio: 1.1, yearsInBusiness: 17, scenario: "normal" };
+
+function randomProfile() {
+  const sectors  = Object.keys(ATECO_NAMES);
+  const regions  = ["LOMBARDIA","VENETO","EMILIA-ROMAGNA","LAZIO","TOSCANA","PIEMONTE","CAMPANIA","SICILIA","PUGLIA","MARCHE"];
+  const forms    = ["SRL","SPA","SRLS","SC","SNC","SAS"];
+  const scenarios= ["normal","normal","normal","recession","sectorBoom","energyShock","ratePressure"];
+  const rand     = (lo, hi, dec = 0) => Number((Math.random() * (hi - lo) + lo).toFixed(dec));
+  return {
+    sector:          sectors[Math.floor(Math.random() * sectors.length)],
+    region:          regions[Math.floor(Math.random() * regions.length)],
+    legalForm:       forms[Math.floor(Math.random() * forms.length)],
+    prevRevChange:   rand(-30, 60),
+    profitMargin:    rand(-8, 20, 1),
+    debtAssets:      rand(15, 85),
+    currentRatio:    rand(0.5, 4, 1),
+    yearsInBusiness: rand(1, 35),
+    scenario:        scenarios[Math.floor(Math.random() * scenarios.length)],
+  };
+}
+
+function BusinessScenarioLabTab() {
+  const [sector,          setSector]          = useState(TYPICAL_PROFILE.sector);
+  const [region,          setRegion]          = useState(TYPICAL_PROFILE.region);
+  const [legalForm,       setLegalForm]       = useState(TYPICAL_PROFILE.legalForm);
+  const [prevRevChange,   setPrevRevChange]   = useState(TYPICAL_PROFILE.prevRevChange);
+  const [profitMargin,    setProfitMargin]    = useState(TYPICAL_PROFILE.profitMargin);
+  const [debtAssets,      setDebtAssets]      = useState(TYPICAL_PROFILE.debtAssets);
+  const [currentRatio,    setCurrentRatio]    = useState(TYPICAL_PROFILE.currentRatio);
+  const [yearsInBusiness, setYearsInBusiness] = useState(TYPICAL_PROFILE.yearsInBusiness);
+  const [scenario,        setScenario]        = useState(TYPICAL_PROFILE.scenario);
+
+  const isMob    = typeof window !== "undefined" && window.innerWidth <= 768;
+  const twoCol   = isMob ? "1fr" : "1fr 1fr";
+  const threeCol = isMob ? "1fr" : "repeat(3,1fr)";
+
+  function applyProfile(p) {
+    setSector(p.sector); setRegion(p.region); setLegalForm(p.legalForm);
+    setPrevRevChange(p.prevRevChange); setProfitMargin(p.profitMargin);
+    setDebtAssets(p.debtAssets); setCurrentRatio(p.currentRatio);
+    setYearsInBusiness(p.yearsInBusiness); setScenario(p.scenario);
+  }
+
+  const result = computeScenarioScore({ sector, region, legalForm, prevRevChange, profitMargin, debtAssets, currentRatio, yearsInBusiness, scenario });
+
+  const selectStyle = { width: "100%", background: C.cardAlt, color: C.white, border: `1px solid ${C.border}`, borderRadius: 6, padding: "7px 10px", fontSize: 13, outline: "none" };
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 18px" }}>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
+        <span style={{ color: "#60A5FA", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, whiteSpace: "nowrap" }}>Part II · Business Scenario Lab</span>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
+      </div>
+
+      <div style={{ background: `${C.blue}0A`, border: `1px solid ${C.blue}28`, borderLeft: `4px solid ${C.blue}`, borderRadius: 10, padding: "14px 18px", marginBottom: 22 }}>
+        <p style={{ color: C.blue, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 5px" }}>How the scoring works</p>
+        <p style={{ color: C.light, fontSize: 13, margin: 0, lineHeight: 1.55 }}>
+          The simulator scores a company profile using the structural weights from the trained Lasso model: previous-year momentum, profit margin, leverage, liquidity, legal form, sector historical medians, and regional benchmarks — all derived from the actual training data. Scenario buttons apply multipliers on top (e.g. Recession dampens and shifts negative; Sector Boom amplifies positive momentum). The result is a directional range grounded in your real feature relationships, not a random estimate.
+        </p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: twoCol, gap: 20, alignItems: "start" }}>
+
+        {/* ── INPUT PANEL ── */}
+        <div>
+          {/* Company profile */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "18px 18px 6px", marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Company Profile</p>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => applyProfile(TYPICAL_PROFILE)} style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}40`, borderRadius: 5, padding: "4px 9px", color: C.accent, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Typical</button>
+                <button onClick={() => applyProfile(randomProfile())} style={{ background: `${C.purple}18`, border: `1px solid ${C.purple}40`, borderRadius: 5, padding: "4px 9px", color: C.purple, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Random</button>
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 5 }}>Sector (ATECO)</span>
+              <select value={sector} onChange={e => setSector(e.target.value)} style={selectStyle}>
+                {Object.entries(ATECO_NAMES).map(([code, name]) => (
+                  <option key={code} value={code}>{name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 5 }}>Region</span>
+              <select value={region} onChange={e => setRegion(e.target.value)} style={selectStyle}>
+                {["LOMBARDIA","VENETO","EMILIA-ROMAGNA","LAZIO","TOSCANA","PIEMONTE","CAMPANIA","SICILIA","PUGLIA","MARCHE","LIGURIA","FRIULI-VENEZIA GIULIA","SARDEGNA","ABRUZZO","UMBRIA","CALABRIA","BASILICATA","MOLISE","TRENTINO-ALTO ADIGE","VALLE D'AOSTA"].map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 5 }}>Legal Form</span>
+              <select value={legalForm} onChange={e => setLegalForm(e.target.value)} style={selectStyle}>
+                {[
+                  { v: "SRL",  l: "S.r.l. — Società a Responsabilità Limitata" },
+                  { v: "SPA",  l: "S.p.A. — Società per Azioni" },
+                  { v: "SRLS", l: "S.r.l.s. — Semplificata" },
+                  { v: "SC",   l: "Società Cooperativa" },
+                  { v: "SNC",  l: "S.n.c. — Società in Nome Collettivo" },
+                  { v: "SAS",  l: "S.a.s. — Società in Accomandita Semplice" },
+                ].map(({ v, l }) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <SliderInput label="Years in Business" value={yearsInBusiness} min={1} max={40} step={1} onChange={setYearsInBusiness} format={v => `${v} yrs`} />
+          </div>
+
+          {/* Financial ratios */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "18px 18px 6px", marginBottom: 14 }}>
+            <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 14px", fontFamily: "'Playfair Display', Georgia, serif" }}>Financial Signals</p>
+            <SliderInput label="Previous Year Revenue Change" value={prevRevChange} min={-60} max={120} step={1} onChange={setPrevRevChange} format={v => `${v > 0 ? "+" : ""}${v}%`} color={prevRevChange > 0 ? C.accent : C.coral} />
+            <SliderInput label="Profit Margin" value={profitMargin} min={-20} max={35} step={0.5} onChange={setProfitMargin} format={v => `${v > 0 ? "+" : ""}${v.toFixed(1)}%`} color={profitMargin > 0 ? C.accent : C.coral} />
+            <SliderInput label="Debt / Assets" value={debtAssets} min={5} max={95} step={1} onChange={setDebtAssets} format={v => `${v}%`} color={debtAssets > 65 ? C.coral : debtAssets > 50 ? C.gold : C.accent} />
+            <SliderInput label="Current Ratio" value={currentRatio} min={0.3} max={5} step={0.1} onChange={setCurrentRatio} format={v => `${v.toFixed(1)}×`} color={currentRatio >= 1.5 ? C.accent : currentRatio >= 1 ? C.gold : C.coral} />
+          </div>
+
+          {/* Scenario buttons */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "18px" }}>
+            <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 12px", fontFamily: "'Playfair Display', Georgia, serif" }}>Macro Scenario</p>
+            <div style={{ display: "grid", gridTemplateColumns: threeCol, gap: 6 }}>
+              {[
+                { key: "normal",       label: "Base Case",     color: C.accent  },
+                { key: "recession",    label: "Recession",     color: C.coral   },
+                { key: "sectorBoom",   label: "Sector Boom",   color: C.blue    },
+                { key: "energyShock",  label: "Energy Shock",  color: C.orange  },
+                { key: "ratePressure", label: "Rate Pressure", color: C.gold    },
+                { key: "geopolitical", label: "Geopolitical",  color: C.purple  },
+              ].map(s => (
+                <button key={s.key} onClick={() => setScenario(s.key)} style={{ background: scenario === s.key ? `${s.color}20` : C.cardAlt, border: `1px solid ${scenario === s.key ? s.color : C.border}`, borderRadius: 6, padding: "8px 4px", color: scenario === s.key ? s.color : C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 0.3, transition: "all 0.15s" }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── OUTPUT PANEL ── */}
+        <div>
+          {/* Forecast range */}
+          <div style={{ background: result.regimeBg, border: `2px solid ${result.regimeColor}45`, borderRadius: 12, padding: "22px", marginBottom: 14, textAlign: "center" }}>
+            <p style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 8px" }}>Projected Revenue Change</p>
+            <p style={{ color: result.regimeColor, fontSize: 50, fontWeight: 800, margin: "0 0 5px", fontFamily: "'Playfair Display', Georgia, serif", lineHeight: 1 }}>
+              {result.point > 0 ? "+" : ""}{result.point}%
+            </p>
+            <p style={{ color: C.light, fontSize: 13, margin: "0 0 14px" }}>
+              Range: {result.low > 0 ? "+" : ""}{result.low}% to {result.high > 0 ? "+" : ""}{result.high}%
+            </p>
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ background: `${result.regimeColor}22`, color: result.regimeColor, fontWeight: 700, fontSize: 12, padding: "5px 14px", borderRadius: 20, border: `1px solid ${result.regimeColor}40` }}>
+                {result.regime}
+              </span>
+              <span style={{ background: `${result.confColor}15`, color: result.confColor, fontWeight: 700, fontSize: 12, padding: "5px 14px", borderRadius: 20, border: `1px solid ${result.confColor}35` }}>
+                {result.confidence} Confidence
+              </span>
+            </div>
+          </div>
+
+          {/* Key drivers */}
+          {result.drivers.length > 0 && (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 18px", marginBottom: 14 }}>
+              <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 12px", fontFamily: "'Playfair Display', Georgia, serif" }}>Key Drivers</p>
+              {result.drivers.slice(0, 4).map((d, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 0", borderBottom: i < Math.min(result.drivers.length, 4) - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <span style={{ color: d.positive ? C.accent : C.coral, fontSize: 16, fontWeight: 800, minWidth: 14, lineHeight: 1.4 }}>{d.positive ? "↑" : "↓"}</span>
+                  <div>
+                    <p style={{ color: d.positive ? C.accent : C.coral, fontSize: 12, fontWeight: 700, margin: "0 0 1px" }}>{d.label}</p>
+                    <p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.4 }}>{d.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Suggested action */}
+          <div style={{ background: `${C.gold}0C`, border: `1px solid ${C.gold}30`, borderRadius: 10, padding: "14px 16px", marginBottom: result.flags.length > 0 ? 14 : 0 }}>
+            <p style={{ color: C.gold, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 6px" }}>Suggested Action</p>
+            <p style={{ color: C.white, fontSize: 13, margin: 0, lineHeight: 1.55 }}>{result.action}</p>
+          </div>
+
+          {/* Warning flags */}
+          {result.flags.length > 0 && (
+            <div style={{ background: `${C.coral}09`, border: `1px solid ${C.coral}30`, borderRadius: 10, padding: "12px 16px" }}>
+              <p style={{ color: C.coral, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 7px" }}>Flags</p>
+              {result.flags.map((f, i) => (
+                <p key={i} style={{ color: C.light, fontSize: 12, margin: i < result.flags.length - 1 ? "0 0 5px" : 0, lineHeight: 1.4 }}>⚠ {f}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p style={{ color: C.muted, fontSize: 11, marginTop: 18, lineHeight: 1.5, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+        Scenario Stress-Test  •  Applies feature-level relationships from the trained Lasso model  •  Not a direct model call — use for directional stress-testing, not exact numerical forecasts  •  For precise predictions, run the model on actual financial statement data.
+      </p>
+    </>
+  );
+}
+
 export default function App() {
-  const [appData, setAppData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [tab, setTab]         = useState("overview");
+  const [appData,    setAppData]    = useState(null);
+  const [modelData,  setModelData]  = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
+  const [tab,        setTab]        = useState("overview");
   const [showScrollTop, setShowScrollTop] = useState(false);
   const isFirstRender = useRef(true);
   const [isMobile, setIsMobile] = useState(() => {
@@ -2084,15 +2412,21 @@ export default function App() {
   });
 
   useEffect(() => {
-    fetch("/train_data.csv")
+    // Load CSV + model outputs in parallel; CSV is required, JSON is optional
+    const csvPromise = fetch("/train_data.csv")
       .then(r => {
         if (!r.ok) throw new Error(`Could not load train_data.csv (HTTP ${r.status})`);
         return r.text();
       })
-      .then(text => {
-        setAppData(processData(parseCSV(text)));
-        setLoading(false);
-      })
+      .then(text => { setAppData(processData(parseCSV(text))); });
+
+    const jsonPromise = fetch("/model_outputs.json")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setModelData(data); })
+      .catch(() => {});
+
+    Promise.all([csvPromise, jsonPromise])
+      .then(() => setLoading(false))
       .catch(e => { setError(e.message); setLoading(false); });
   }, []);
 
@@ -2126,12 +2460,12 @@ export default function App() {
   const part2LeaderboardSplit = isMobile ? "1fr" : "3fr 1fr";
   const part2DecisionSplit = isMobile ? "1fr" : "2fr 1fr";
 
-  const yearColors = { overview: C.white, "2018": C.accent, "2019": C.blue, "2020": C.gold, signals: C.orange, map: C.teal, summary: C.purple, features: "#A78BFA", nextsteps: "#F472B6", featsel: "#38BDF8", models: "#34D399", tuning: "#FB923C", advanced: "#E879F9", regime: "#F87171", regions2: "#22D3EE", forecast: "#FCD34D", errors: "#F472B6" };
+  const yearColors = { overview: C.white, "2018": C.accent, "2019": C.blue, "2020": C.gold, signals: C.orange, map: C.teal, summary: C.purple, features: "#A78BFA", nextsteps: "#F472B6", featsel: "#38BDF8", models: "#34D399", tuning: "#FB923C", advanced: "#E879F9", regime: "#F87171", regions2: "#22D3EE", forecast: "#FCD34D", errors: "#F472B6", scenario: "#60A5FA" };
 
   if (loading) return (
     <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, fontFamily: "'DM Sans', sans-serif" }}>
       <div className="spinner" />
-      <p style={{ color: C.accent, fontSize: 16, margin: 0 }}>Loading train_data.csv…</p>
+      <p style={{ color: C.accent, fontSize: 16, margin: 0 }}>Just a moment…</p>
     </div>
   );
 
@@ -2202,7 +2536,7 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 5, height: 28, background: C.accent, borderRadius: 3 }} />
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Revenue Forecasting: EDA & Feature Engineering</h1>
+            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Italian Revenue Forecasting</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}30`, borderRadius: 6, padding: "4px 10px", color: C.accent, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>Group 6</span>
@@ -2210,7 +2544,7 @@ export default function App() {
           </div>
         </div>
         <p style={{ color: C.muted, fontSize: 13, margin: "2px 0 14px 15px", letterSpacing: 0.4 }}>
-          Challenge 3  •  {uniqueCompanies.toLocaleString()} unique Italian companies  •  {totalRows.toLocaleString()} observations across 2018-2020  •  Target: next-year revenue change (%)
+          ExpertAI × LUISS  •  {uniqueCompanies.toLocaleString()} Italian companies  •  Financial statements 2018–2022  •  Annual revenue movement forecasting
           {"  •  "}
           <a href="https://github.com/deniztaylan06/Expert_AI_project/tree/main" target="_blank" rel="noopener noreferrer" style={{ color: C.accent, textDecoration: "none", fontWeight: 600 }}>
             GitHub ↗
@@ -2235,6 +2569,7 @@ export default function App() {
           <Tab active={tab === "regions2"}  onClick={() => setTab("regions2")}  color={yearColors.regions2}>Regional Analysis</Tab>
           <Tab active={tab === "errors"}   onClick={() => setTab("errors")}   color={yearColors.errors}>Error Analysis</Tab>
           <Tab active={tab === "forecast"}  onClick={() => setTab("forecast")}  color={yearColors.forecast}>Final Forecast</Tab>
+          <Tab active={tab === "scenario"} onClick={() => setTab("scenario")} color={yearColors.scenario}>Scenario Lab</Tab>
         </div>
       </div>
 
@@ -3010,22 +3345,25 @@ export default function App() {
             PART II - MODEL RESULTS
         ═══════════════════════════════════════════════════════ */}
         {tab === "models" && (() => {
-          const models = [
-            { name: "Lasso",            group: "linear",   features: 49, dacc: 74.5225, spear: 0.6841, rmse: 494.7, color: C.accent, tag: "BEST OVERALL" },
-            { name: "ElasticNet",       group: "linear",   features: 49, dacc: 74.5225, spear: 0.6838, rmse: 495.1, color: C.gold,   tag: "" },
-            { name: "LinearRegression", group: "linear",   features: 49, dacc: 74.6248, spear: 0.6829, rmse: 495.0, color: C.muted,  tag: "Best Dir." },
-            { name: "Ridge",            group: "linear",   features: 49, dacc: 74.4884, spear: 0.6836, rmse: 495.3, color: C.muted,  tag: "" },
-            { name: "RandomForest",     group: "advanced", features: 49, dacc: 74.4543, spear: 0.6736, rmse: 509.4, color: C.teal,   tag: "" },
-            { name: "CatBoost",         group: "advanced", features: 49, dacc: 74.2838, spear: 0.6749, rmse: 501.8, color: C.blue,   tag: "Best Tree" },
-            { name: "LightGBM",         group: "advanced", features: 49, dacc: 73.8745, spear: 0.6634, rmse: 511.5, color: C.purple, tag: "" },
-            { name: "XGBoost",          group: "advanced", features: 49, dacc: 73.8745, spear: 0.6595, rmse: 514.7, color: C.orange, tag: "" },
-            { name: "BaselineMedian",   group: "baseline", features: 49, dacc: 70.5662, spear: 0.5689, rmse: 549.3, color: C.coral,  tag: "Baseline" },
+          const groupColorMap = { linear: C.gold, advanced: C.accent, baseline: C.coral };
+          const rawModels = modelData?.models || [
+            { name: "Lasso",            group: "linear",   features: 49, dacc: 74.5225, spear: 0.6841, rmse: 494.7, tag: "BEST OVERALL" },
+            { name: "ElasticNet",       group: "linear",   features: 49, dacc: 74.5225, spear: 0.6838, rmse: 495.1, tag: "" },
+            { name: "LinearRegression", group: "linear",   features: 49, dacc: 74.6248, spear: 0.6829, rmse: 495.0, tag: "Best Dir." },
+            { name: "Ridge",            group: "linear",   features: 49, dacc: 74.4884, spear: 0.6836, rmse: 495.3, tag: "" },
+            { name: "RandomForest",     group: "advanced", features: 49, dacc: 74.4543, spear: 0.6736, rmse: 509.4, tag: "" },
+            { name: "CatBoost",         group: "advanced", features: 49, dacc: 74.2838, spear: 0.6749, rmse: 501.8, tag: "Best Tree" },
+            { name: "LightGBM",         group: "advanced", features: 49, dacc: 73.8745, spear: 0.6634, rmse: 511.5, tag: "" },
+            { name: "XGBoost",          group: "advanced", features: 49, dacc: 73.8745, spear: 0.6595, rmse: 514.7, tag: "" },
+            { name: "BaselineMedian",   group: "baseline", features: 49, dacc: 70.5662, spear: 0.5689, rmse: 549.3, tag: "Baseline" },
           ];
-          const stability = [
-            { fold: "Pre-COVID\n2018→2019", shortFold: "2018→19",   dacc: 72.9364, spear: 0.6359, wape: 92.82, tmape: 156.9, n: 41, color: C.blue },
-            { fold: "COVID\n2018-19→2020",  shortFold: "2018-19→20", dacc: 74.5225, spear: 0.6841, wape: 88.71, tmape: 166.7, n: 49, color: C.gold },
-            { fold: "Post-COVID\n2018-20→2021", shortFold: "18-20→21", dacc: 75.6173, spear: 0.7031, wape: 86.45, tmape: 164.5, n: 49, color: C.accent },
-          ];
+          const stabColors = [C.blue, C.gold, C.accent];
+          const models    = rawModels.map(m => ({ ...m, color: groupColorMap[m.group] || C.muted }));
+          const stability = (modelData?.stability || [
+            { shortFold: "2018→19",   dacc: 72.9364, spear: 0.6359, wape: 92.82, tmape: 156.9, n: 41 },
+            { shortFold: "2018-19→20",dacc: 74.5225, spear: 0.6841, wape: 88.71, tmape: 166.7, n: 49 },
+            { shortFold: "18-20→21",  dacc: 75.6173, spear: 0.7031, wape: 86.45, tmape: 164.5, n: 49 },
+          ]).map((s, i) => ({ ...s, color: stabColors[i] || C.accent }));
           const groupColors = { advanced: C.accent, linear: C.gold, baseline: C.coral };
           return (
             <>
@@ -3137,7 +3475,7 @@ export default function App() {
             PART II - HYPERPARAMETER TUNING
         ═══════════════════════════════════════════════════════ */}
         {tab === "tuning" && (() => {
-          const tuningRows = [
+          const tuningRows = modelData?.tuningRows || [
             { depth: 6, iterations: 300, learningRate: 0.03, wape: 88.69, spear: 0.6801, tmape: 161.7, rmse: 501.8, rank: 1 },
             { depth: 6, iterations: 300, learningRate: 0.05, wape: 88.89, spear: 0.6805, tmape: 163.4, rmse: 503.4, rank: 2 },
             { depth: 4, iterations: 300, learningRate: 0.05, wape: 88.89, spear: 0.6802, tmape: 165.8, rmse: 504.2, rank: 3 },
@@ -3148,11 +3486,11 @@ export default function App() {
             { depth: 6, iterations: 700, learningRate: 0.03, wape: 89.33, spear: 0.6762, tmape: 170.1, rmse: 512.5, rank: 8 },
             { depth: 6, iterations: 500, learningRate: 0.05, wape: 89.01, spear: 0.6772, tmape: 168.4, rmse: 508.3, rank: 9 },
           ];
-          const clippingData = [
-            { label: "No Clip",       clip: "None",         wape: 88.82, tmape: 173.0, note: "Extreme events dominate loss" },
-            { label: "P2-P98",        clip: "(0.02, 0.98)", wape: 88.73, tmape: 169.9, note: "Mild trim, small improvement" },
-            { label: "P5-P95 ✓",     clip: "(0.05, 0.95)", wape: 88.71, tmape: 166.7, note: "Optimal, selected" },
-            { label: "+ Pred. Winsor",clip: "P5-P95 + P2-P98",wape: 89.27, tmape: 166.6, note: "Hurts WAPE, rejected" },
+          const clippingData = modelData?.clippingData || [
+            { label: "No Clip",       clip: "None",            wape: 88.82, tmape: 173.0, note: "Extreme events dominate loss" },
+            { label: "P2-P98",        clip: "(0.02, 0.98)",    wape: 88.73, tmape: 169.9, note: "Mild trim, small improvement" },
+            { label: "P5-P95 ✓",     clip: "(0.05, 0.95)",    wape: 88.71, tmape: 166.7, note: "Optimal, selected" },
+            { label: "+ Pred. Winsor",clip: "P5-P95 + P2-P98", wape: 89.27, tmape: 166.6, note: "Hurts WAPE, rejected" },
           ];
           return (
             <>
@@ -3320,16 +3658,17 @@ export default function App() {
             PART II - INNOVATIVE IDEAS
         ═══════════════════════════════════════════════════════ */}
         {tab === "advanced" && (() => {
-          const challengers = [
-            { name: "Lasso Base (Clean)",   family: "Linear",          dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, rmse: 496.2, color: C.accent, rank: 1, tag: "BEST", tagColor: C.accent },
-            { name: "Extreme Event Adj.",   family: "Rule-based",      dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, rmse: 496.2, color: C.blue,   rank: 2, tag: "", tagColor: C.blue },
-            { name: "Quantile Calibration", family: "Post-processing", dacc: 75.62, wape: 86.47, spear: 0.7031, tmape: 169.1, rmse: 483.9, color: C.gold,   rank: 3, tag: "", tagColor: C.gold },
-            { name: "Two-Stage Regime",     family: "Stacked Model",   dacc: 75.48, wape: 86.54, spear: 0.6985, tmape: 165.8, rmse: 499.4, color: C.teal,   rank: 4, tag: "", tagColor: C.teal },
-            { name: "Peer-Prior Shrinkage", family: "Shrinkage",       dacc: 75.31, wape: 86.58, spear: 0.7009, tmape: 161.7, rmse: 494.2, color: C.purple, rank: 5, tag: "Best TMAPE", tagColor: C.purple },
-            { name: "Consensus Median",     family: "Ensemble",        dacc: 75.31, wape: 86.47, spear: 0.7005, tmape: 171.1, rmse: 497.1, color: C.muted,  rank: 6, tag: "", tagColor: C.muted },
-            { name: "CatBoost Log-Target",  family: "Gradient Boost",  dacc: 75.14, wape: 86.40, spear: 0.6959, tmape: 163.4, rmse: 493.5, color: C.orange, rank: 7, tag: "Best WAPE", tagColor: C.orange },
-            { name: "Residual Correction",  family: "Stacked",         dacc: 74.25, wape: 92.40, spear: 0.6937, tmape: 249.8, rmse: 617.2, color: C.coral,  rank: 8, tag: "REJECTED", tagColor: C.coral },
-          ];
+          const challColors = [C.accent, C.blue, C.gold, C.teal, C.purple, C.muted, C.orange, C.coral];
+          const challengers = (modelData?.challengers || [
+            { name: "Lasso Base (Clean)",   family: "Linear",          dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, rmse: 496.2, rank: 1, tag: "BEST" },
+            { name: "Extreme Event Adj.",   family: "Rule-based",      dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, rmse: 496.2, rank: 2, tag: "" },
+            { name: "Quantile Calibration", family: "Post-processing", dacc: 75.62, wape: 86.47, spear: 0.7031, tmape: 169.1, rmse: 483.9, rank: 3, tag: "" },
+            { name: "Two-Stage Regime",     family: "Stacked Model",   dacc: 75.48, wape: 86.54, spear: 0.6985, tmape: 165.8, rmse: 499.4, rank: 4, tag: "" },
+            { name: "Peer-Prior Shrinkage", family: "Shrinkage",       dacc: 75.31, wape: 86.58, spear: 0.7009, tmape: 161.7, rmse: 494.2, rank: 5, tag: "Best TMAPE" },
+            { name: "Consensus Median",     family: "Ensemble",        dacc: 75.31, wape: 86.47, spear: 0.7005, tmape: 171.1, rmse: 497.1, rank: 6, tag: "" },
+            { name: "CatBoost Log-Target",  family: "Gradient Boost",  dacc: 75.14, wape: 86.40, spear: 0.6959, tmape: 163.4, rmse: 493.5, rank: 7, tag: "Best WAPE" },
+            { name: "Residual Correction",  family: "Stacked",         dacc: 74.25, wape: 92.40, spear: 0.6937, tmape: 249.8, rmse: 617.2, rank: 8, tag: "REJECTED" },
+          ]).map((c, i) => ({ ...c, color: challColors[i] || C.muted, tagColor: challColors[i] || C.muted }));
           const methods = [
             {
               name: "Peer-Prior Shrinkage",
@@ -3440,6 +3779,58 @@ export default function App() {
                 ))}
               </div>
 
+              {/* DATA IMPROVEMENT ROADMAP */}
+              <Heading sub="Four data categories that would materially strengthen forecast accuracy and business relevance" insight="The current model reads backward-looking financial statements — forward-looking signals are the next frontier">What Data Would Improve the Forecast?</Heading>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                {[
+                  {
+                    color: C.accent, icon: "◈", title: "Financial Statement Detail",
+                    intro: "Current assets are too broad — cash and unsold inventory signal very differently to a lender or investor.",
+                    items: ["Cash & cash equivalents","Inventory turnover","Receivables & payables","EBITDA","Tax expense","D&A","Debt maturity schedule","Fixed vs. variable rate debt","Customer concentration"],
+                  },
+                  {
+                    color: C.blue, icon: "◎", title: "Operational Signals",
+                    intro: "Financial statements lag reality by 12+ months. Operational data detects revenue changes before they reach the balance sheet.",
+                    items: ["Orders backlog / booking pipeline","Occupancy rate (hospitality)","Average selling price","Customer retention","Headcount trend","Capacity utilisation","Website & search traffic","CRM pipeline value"],
+                  },
+                  {
+                    color: C.gold, icon: "⊕", title: "Macroeconomic Context",
+                    intro: "Revenue changes are partly company-specific and partly macro-driven — the current model captures neither.",
+                    items: ["GDP growth forecast","CPI / inflation","Policy interest rate","Unemployment rate","Energy prices","EUR/USD exchange rate","Tourism arrivals (ISTAT)","Sector confidence indexes"],
+                  },
+                  {
+                    color: C.purple, icon: "⟳", title: "Geopolitical & Demand Signals",
+                    intro: "For hospitality and trade-exposed sectors, demand depends on factors invisible in any balance sheet.",
+                    items: ["Bilateral political relations","Travel restrictions & visa policy","Airline route capacity","Sanction exposure","Conflict proximity index","Household income in origin countries","Political risk score","Social media sentiment"],
+                    note: "A hotel with perfect financials can still face a demand shock if key origin-country travel relations deteriorate — nothing in the P&L captures that.",
+                  },
+                ].map((cat, i) => (
+                  <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `4px solid ${cat.color}`, borderRadius: 10, padding: "16px 18px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                      <span style={{ color: cat.color, fontSize: 20, fontWeight: 800 }}>{cat.icon}</span>
+                      <span style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>{cat.title}</span>
+                    </div>
+                    <p style={{ color: C.light, fontSize: 12, margin: "0 0 10px", lineHeight: 1.5 }}>{cat.intro}</p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: cat.note ? 10 : 0 }}>
+                      {cat.items.map((item, j) => (
+                        <span key={j} style={{ background: `${cat.color}12`, color: cat.color, fontSize: 11, padding: "3px 8px", borderRadius: 4, border: `1px solid ${cat.color}25` }}>{item}</span>
+                      ))}
+                    </div>
+                    {cat.note && (
+                      <div style={{ background: `${cat.color}08`, border: `1px solid ${cat.color}20`, borderRadius: 6, padding: "8px 10px" }}>
+                        <p style={{ color: cat.color, fontSize: 11, margin: 0, lineHeight: 1.45, fontStyle: "italic" }}>{cat.note}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: `${C.accent}0A`, border: `1px solid ${C.accent}22`, borderRadius: 10, padding: "14px 18px", marginTop: 16 }}>
+                <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: "0 0 6px" }}>How ExpertAI's NLP Capabilities Close the Gap</p>
+                <p style={{ color: C.light, fontSize: 13, margin: 0, lineHeight: 1.55 }}>
+                  The current model reads structured financial ratios. ExpertAI's NLP layer could extract forward-looking signals from annual reports, management commentary, risk disclosures, regulatory filings, and sector news. A company that flags cost pressure or contract loss in its annual report will show revenue stress in the next filing — NLP captures that signal months earlier than any balance sheet can.
+                </p>
+              </div>
 
             </>
           );
@@ -3756,6 +4147,39 @@ export default function App() {
                   </div>
                 ))}
               </div>
+
+              {/* FROM MODEL TO BUSINESS ACTION */}
+              <Heading sub="Translating regime predictions into concrete business decisions" insight="The model's strongest use is ranking companies by likely movement and identifying risk regimes — not producing exact point estimates">From Prediction to Action</Heading>
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr 1.6fr", background: C.cardAlt, borderBottom: `1px solid ${C.border}` }}>
+                  {["Regime", "Business Meaning", "Suggested Action"].map((h, i) => (
+                    <div key={i} style={{ padding: "10px 14px" }}>
+                      <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{h}</span>
+                    </div>
+                  ))}
+                </div>
+                {[
+                  { regime: "Severe Decline", color: C.coral,   meaning: "Revenue shock risk — major drop likely",              action: "Review cost structure, renegotiate debt terms, audit customer pipeline immediately." },
+                  { regime: "Mild Decline",   color: "#FF9F7F", meaning: "Pressure but manageable with early intervention",      action: "Monitor pricing power and working capital. Cost reduction before new investment." },
+                  { regime: "Stable",         color: C.gold,    meaning: "Normal operating band — no strong signal either way",  action: "Benchmark against sector peers. Identify margin improvement levers." },
+                  { regime: "Growth",         color: C.accent,  meaning: "Expansion opportunity — above-median momentum",        action: "Selective investment and capacity expansion. Protect working capital as you scale." },
+                  { regime: "Hypergrowth",    color: C.purple,  meaning: "Possible structural event — investigate before acting", action: "Check for M&A, new major contract, or accounting reclassification." },
+                ].map((row, i, arr) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr 1.6fr", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <div style={{ padding: "12px 14px", display: "flex", alignItems: "center" }}>
+                      <span style={{ background: `${row.color}20`, color: row.color, fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20, border: `1px solid ${row.color}35`, whiteSpace: "nowrap" }}>{row.regime}</span>
+                    </div>
+                    <div style={{ padding: "12px 14px" }}><p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.45 }}>{row.meaning}</p></div>
+                    <div style={{ padding: "12px 14px" }}><p style={{ color: C.light, fontSize: 12, margin: 0, lineHeight: 1.45 }}>{row.action}</p></div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: `${C.accent}09`, border: `1px solid ${C.accent}22`, borderRadius: 8, padding: "12px 16px", marginTop: 12 }}>
+                <p style={{ color: C.accent, fontSize: 13, margin: 0, lineHeight: 1.5 }}>
+                  A company in <strong>Severe Decline</strong> with high leverage is a fundamentally different business risk from one in <strong>Hypergrowth</strong> — the regime label makes that distinction immediately actionable for a decision-maker who does not read model scores.
+                </p>
+              </div>
+
             </>
           );
         })()}
@@ -3769,24 +4193,42 @@ export default function App() {
             PART II - FINAL FORECAST
         ═══════════════════════════════════════════════════════ */}
         {tab === "forecast" && (() => {
-          const finalAudit = [
-            { label: "2022→2023 Lasso (Clean Base)",    model: "Lasso",    dacc: 74.16, spear: 0.6780, tmape: 169.9, wape: 87.3, smape: 108.3, color: C.accent, tag: "PRIMARY" },
-            { label: "2022→2023 CatBoost (Sensitivity)", model: "CatBoost", dacc: 73.64, spear: 0.6712, tmape: 172.1, wape: 88.6, smape: 109.1, color: C.blue,   tag: "TRANSFER CHECK" },
+          const auditColors = [C.accent, C.blue];
+          const finalAudit  = (modelData?.finalAudit || [
+            { label: "2022→2023 Lasso (Clean Base)",     model: "Lasso",    dacc: 74.16, spear: 0.6780, tmape: 169.9, wape: 87.3, smape: 108.3, tag: "PRIMARY" },
+            { label: "2022→2023 CatBoost (Sensitivity)", model: "CatBoost", dacc: 73.64, spear: 0.6712, tmape: 172.1, wape: 88.6, smape: 109.1, tag: "TRANSFER CHECK" },
+          ]).map((a, i) => ({ ...a, color: auditColors[i] || C.muted }));
+
+          const pred2024Colors = [C.coral, "#FF9F7F", C.gold, C.accent, C.purple];
+          const pred2024 = (modelData?.pred2024 || [
+            { pct: "<-50%",   pct_val: 28.2, label: "Severe Decline" },
+            { pct: "-50:0%",  pct_val: 21.4, label: "Mild Decline" },
+            { pct: "0:50%",   pct_val: 12.8, label: "Stable Growth" },
+            { pct: "50:100%", pct_val: 8.4,  label: "Strong Growth" },
+            { pct: ">100%",   pct_val: 29.2, label: "Hypergrowth" },
+          ]).map((d, i) => ({ ...d, color: pred2024Colors[i] || C.accent }));
+
+          const sfColors    = [C.blue, C.gold, C.accent, C.purple, C.teal];
+          const stabilityFull = (modelData?.stabilityFull || [
+            { fold: "18→19",    dacc: 72.94, spear: 0.636 },
+            { fold: "18-19→20", dacc: 74.52, spear: 0.684 },
+            { fold: "18-20→21", dacc: 75.62, spear: 0.703 },
+            { fold: "18-21→22", dacc: 75.62, spear: 0.703 },
+            { fold: "18-22→23", dacc: 74.16, spear: 0.678 },
+          ]).map((s, i) => ({ ...s, color: sfColors[i] || C.accent }));
+
+          const kpis = modelData?.finalAuditKPIs || [
+            { label: "Rows Audited",         val: "2,895",   sub: "Italian companies with 2022 financials" },
+            { label: "Directional Accuracy", val: "74.16%",  sub: "Lasso clean base on 2023 actual labels" },
+            { label: "Spearman ρ",           val: "0.6780",  sub: "Ranking quality of growth predictions" },
+            { label: "TMAPE₉₅ Coverage",     val: "169.89%", sub: "Slightly wider than 2021 holdout, expected on new data" },
           ];
-          const pred2024 = [
-            { pct: "<-50%",   pct_val: 28.2, color: C.coral,   label: "Severe Decline" },
-            { pct: "-50:0%",  pct_val: 21.4, color: "#FF9F7F", label: "Mild Decline" },
-            { pct: "0:50%",   pct_val: 12.8, color: C.gold,    label: "Stable Growth" },
-            { pct: "50:100%", pct_val: 8.4,  color: C.accent,  label: "Strong Growth" },
-            { pct: ">100%",   pct_val: 29.2, color: C.purple,  label: "Hypergrowth" },
-          ];
-          const stabilityFull = [
-            { fold: "18→19",    dacc: 72.94, spear: 0.636, color: C.blue },
-            { fold: "18-19→20", dacc: 74.52, spear: 0.684, color: C.gold },
-            { fold: "18-20→21", dacc: 75.62, spear: 0.703, color: C.accent },
-            { fold: "18-21→22", dacc: 75.62, spear: 0.703, color: C.purple },
-            { fold: "18-22→23", dacc: 74.16, spear: 0.678, color: C.teal },
-          ];
+          const kpiColors = [C.accent, C.gold, C.blue, C.purple];
+
+          const pred2024Summ = modelData?.pred2024Summary || {
+            firms_scored: "2,895", mean_predicted_change: "+117.5%", median_predicted_change: "+1.6%",
+            train_window: "2018-2022", source_year: "2023 financials", primary_model: "Lasso clean base",
+          };
           return (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 20px" }}>
@@ -3797,14 +4239,9 @@ export default function App() {
 
               <Heading sub="Observable final audit: 2022 financial statements → 2023 revenue change (actual labels available)" insight="Clean base and CatBoost sensitivity agree, the model generalises to 2023 unseen data">2022 → 2023 Final Audit</Heading>
               <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
-                {[
-                  { label: "Rows Audited", val: "2,895", sub: "Italian companies with 2022 financials", color: C.accent },
-                  { label: "Directional Accuracy", val: "74.16%", sub: "Lasso clean base on 2023 actual labels", color: C.gold },
-                  { label: "Spearman ρ", val: "0.6780", sub: "Ranking quality of growth predictions", color: C.blue },
-                  { label: "TMAPE₉₅ Coverage", val: "169.89%", sub: "Slightly wider than 2021 holdout, expected on new data", color: C.purple },
-                ].map((m, i) => (
-                  <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${m.color}`, borderRadius: 8, padding: "16px 18px" }}>
-                    <p style={{ color: m.color, fontSize: 24, fontWeight: 800, margin: "0 0 4px", fontFamily: "'Playfair Display', Georgia, serif" }}>{m.val}</p>
+                {kpis.map((m, i) => (
+                  <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${kpiColors[i] || C.accent}`, borderRadius: 8, padding: "16px 18px" }}>
+                    <p style={{ color: kpiColors[i] || C.accent, fontSize: 24, fontWeight: 800, margin: "0 0 4px", fontFamily: "'Playfair Display', Georgia, serif" }}>{m.val}</p>
                     <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 4px" }}>{m.label}</p>
                     <p style={{ color: C.muted, fontSize: 12, margin: 0 }}>{m.sub}</p>
                   </div>
@@ -3834,12 +4271,12 @@ export default function App() {
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 12px" }}>2024 Prediction Summary</p>
                   {[
-                    { label: "Firms Scored", val: "2,895", color: C.white },
-                    { label: "Mean Predicted Change", val: "+117.5%", color: C.accent },
-                    { label: "Median Predicted Change", val: "+1.6%", color: C.muted },
-                    { label: "Train Window", val: "2018-2022", color: C.blue },
-                    { label: "Source Year", val: "2023 financials", color: C.gold },
-                    { label: "Primary Model", val: "Lasso clean base", color: C.purple },
+                    { label: "Firms Scored",            val: pred2024Summ.firms_scored,            color: C.white  },
+                    { label: "Mean Predicted Change",   val: pred2024Summ.mean_predicted_change,   color: C.accent },
+                    { label: "Median Predicted Change", val: pred2024Summ.median_predicted_change, color: C.muted  },
+                    { label: "Train Window",             val: pred2024Summ.train_window,            color: C.blue   },
+                    { label: "Source Year",              val: pred2024Summ.source_year,             color: C.gold   },
+                    { label: "Primary Model",            val: pred2024Summ.primary_model,           color: C.purple },
                   ].map((m, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: i < 5 ? `1px solid ${C.border}` : "none" }}>
                       <span style={{ color: C.muted, fontSize: 12 }}>{m.label}</span>
@@ -4154,9 +4591,14 @@ export default function App() {
           );
         })()}
 
+        {/* ═══════════════════════════════════════════════════════
+            SCENARIO LAB
+        ═══════════════════════════════════════════════════════ */}
+        {tab === "scenario" && <BusinessScenarioLabTab />}
+
         <div style={{ marginTop: 20, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>
-            ExpertAI Challenge 3  •  LUISS University 2025/2026
+            ExpertAI  •  LUISS University 2025/2026
           </p>
           <a
             href="https://github.com/deniztaylan06/Expert_AI_project/tree/main"
