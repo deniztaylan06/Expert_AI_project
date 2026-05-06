@@ -152,6 +152,36 @@ select {
   [style*="gridTemplateColumns: \"1.2fr 1fr"] {
     grid-template-columns: 1fr !important;
   }
+
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns: repeat(2"],
+  [style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns: repeat(5"],
+  [style*="grid-template-columns: 2fr 1fr"],
+  [style*="grid-template-columns: 3fr 2fr"],
+  [style*="grid-template-columns: 1.3fr 1fr"],
+  [style*="grid-template-columns: 1.2fr 1fr"],
+  [style*="grid-template-columns: 1.4fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .main-content {
+    max-width: 100% !important;
+    overflow-x: hidden;
+  }
+
+  .presentation-nav {
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr !important;
+    align-items: center !important;
+  }
+
+  .presentation-nav button {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* Phone — tighter padding and font reductions */
@@ -211,6 +241,21 @@ select {
   /* Italy map: reduce height */
   .map-container {
     height: 340px !important;
+  }
+
+  .presentation-nav {
+    grid-template-columns: 1fr !important;
+    text-align: center;
+  }
+
+  .presentation-nav button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tab-bar > button {
+    padding: 7px 12px !important;
+    font-size: 12px !important;
   }
 }
 

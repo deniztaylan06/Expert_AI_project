@@ -506,10 +506,54 @@ function computeOutliersData(rows) {
   });
 }
 
-// === MAIN DATA PROCESSING ===
-function processData(rawRows) {
-  // Parse all numeric fields up front
-  const rows = rawRows.map(r => ({
+// === PER-YEAR REGIONAL INTELLIGENCE (used by the map temporal slider) ===
+function computeRegionYearData(rows, year) {
+  const yearRows = rows.filter(r => year === "all" || r.fiscal_year === year);
+  const byRegion = {};
+  for (const r of yearRows) {
+    if (!r.region) continue;
+    if (!byRegion[r.region]) byRegion[r.region] = { vals: [], pvVals: [], leverVals: [], marginVals: [], cos: new Set(), sectorCnt: {} };
+    const reg = byRegion[r.region];
+    reg.cos.add(r.company_id);
+    if (r.revenue_change !== null && isFinite(r.revenue_change)) reg.vals.push(r.revenue_change);
+    if (r.production_value > 0) reg.pvVals.push(r.production_value);
+    if (isFinite(r.leverage) && r.leverage !== 0) reg.leverVals.push(r.leverage);
+    if (isFinite(r.profit_margin)) reg.marginVals.push(r.profit_margin);
+    if (r.ateco_sector) reg.sectorCnt[r.ateco_sector] = (reg.sectorCnt[r.ateco_sector] || 0) + 1;
+  }
+  const result = {};
+  for (const [region, d] of Object.entries(byRegion)) {
+    const n = d.vals.length;
+    const s = [...d.vals].sort((a, b) => a - b);
+    const mean = n > 0 ? d.vals.reduce((a, b) => a + b, 0) / n : 0;
+    const topSectorEntry = Object.entries(d.sectorCnt).sort((a, b) => b[1] - a[1])[0];
+    result[region] = {
+      companies:        d.cos.size,
+      total_obs:        n,
+      median_growth:    n > 0 ? round2(pct(s, 50)) : 0,
+      distress_ratio:   n > 0 ? round2(d.vals.filter(v => v < -50).length / n * 100) : 0,
+      high_growth_ratio:n > 0 ? round2(d.vals.filter(v => v > 50).length  / n * 100) : 0,
+      volatility:       n > 1 ? round2(Math.sqrt(d.vals.reduce((acc, v) => acc + (v - mean) ** 2, 0) / n)) : 0,
+      median_revenue:   d.pvVals.length > 0 ? medianOf(d.pvVals) : 0,
+      avg_leverage:     d.leverVals.length > 0 ? round2(d.leverVals.reduce((a, b) => a + b, 0) / d.leverVals.length) : 0,
+      avg_margin:       d.marginVals.length > 0 ? round2(d.marginVals.reduce((a, b) => a + b, 0) / d.marginVals.length) : 0,
+      top_sector:       topSectorEntry ? `ATECO ${String(topSectorEntry[0]).padStart(2, "0")}` : "N/A",
+    };
+  }
+  const allVals = Object.values(byRegion).flatMap(d => d.vals);
+  const allS    = [...allVals].sort((a, b) => a - b);
+  result._national = {
+    medianGrowth:     allVals.length > 0 ? round2(pct(allS, 50)) : 0,
+    distressRatio:    allVals.length > 0 ? round2(allVals.filter(v => v < -50).length / allVals.length * 100) : 0,
+    highGrowthRatio:  allVals.length > 0 ? round2(allVals.filter(v => v > 50).length  / allVals.length * 100) : 0,
+    totalObs:         allVals.length,
+    numRegions:       Object.keys(result).length,
+  };
+  return result;
+}
+
+function parseFinancialRows(rawRows) {
+  return rawRows.map(r => ({
     company_id:       r.company_id,
     fiscal_year:      parseInt(r.fiscal_year),
     region:           r.region,
@@ -542,6 +586,39 @@ function processData(rawRows) {
     production_value_next: null,
     revenue_change_next:   null,
   }));
+}
+
+function fillDerivedRevenueChange(rows) {
+  const byCompany = {};
+  for (const r of rows) {
+    if (!byCompany[r.company_id]) byCompany[r.company_id] = [];
+    byCompany[r.company_id].push(r);
+  }
+  for (const companyRows of Object.values(byCompany)) {
+    companyRows.sort((a, b) => a.fiscal_year - b.fiscal_year);
+    for (let i = 1; i < companyRows.length; i++) {
+      const prev = companyRows[i - 1];
+      const curr = companyRows[i];
+      if ((curr.revenue_change === null || !isFinite(curr.revenue_change)) && prev.production_value > 0 && curr.production_value > 0) {
+        curr.revenue_change = ((curr.production_value - prev.production_value) / prev.production_value) * 100;
+      }
+    }
+  }
+  return rows;
+}
+
+function getRegionalYears(rows) {
+  return [...new Set(rows
+    .filter(r => r.region && r.revenue_change !== null && isFinite(r.revenue_change))
+    .map(r => r.fiscal_year))]
+    .sort((a, b) => a - b);
+}
+
+// === MAIN DATA PROCESSING ===
+function processData(rawRows, mapRawRows = rawRows) {
+  // Parse all numeric fields up front
+  const rows = parseFinancialRows(rawRows);
+  const mapRows = fillDerivedRevenueChange(parseFinancialRows(mapRawRows));
 
   // ── Derive all metadata dynamically from the data ──────────────────────────
   const sectorCounts    = {};
@@ -608,8 +685,13 @@ function processData(rawRows) {
 
   const covidSectorImpact        = computeCovidSectorImpact(rows, dynSectorCodes);
   const signalData               = computeRevenueSignals(rows, byCompany);
-  const regionMapData            = computeRegionMapData(rows);
+  const regionMapData            = computeRegionYearData(mapRows, "all");
   const regionHistoricalData     = computeRegionHistoricalData(rows);
+  const mapYears                 = getRegionalYears(mapRows);
+  const regionByYear             = {
+    all: computeRegionYearData(mapRows, "all"),
+    ...Object.fromEntries(mapYears.map(yr => [yr, computeRegionYearData(mapRows, yr)])),
+  };
   const correlationData      = computeCorrelationData(rows);
   const yearsInBusinessData  = computeYearsInBusinessAnalysis(rows);
   const outliersData         = computeOutliersData(rows);
@@ -620,7 +702,7 @@ function processData(rawRows) {
     2020: computeYearCorrData(rows, 2020),
   };
 
-  return { yearsData, crossYear, crossMetrics, uniqueCompanies, totalRows, covidSectorImpact, signalData, regionMapData, regionHistoricalData, correlationData, yearsInBusinessData, outliersData, missingnessData, yearsCorrelationData };
+  return { yearsData, crossYear, crossMetrics, uniqueCompanies, totalRows, covidSectorImpact, signalData, regionMapData, regionByYear, mapYears, regionHistoricalData, correlationData, yearsInBusinessData, outliersData, missingnessData, yearsCorrelationData };
 }
 
 // === PER-YEAR STATS (fully dynamic) ===
@@ -1226,145 +1308,176 @@ function fmtEuro(v) {
   return `€${v.toFixed(0)}`;
 }
 
-function ItalyMapTab({ regionMapData }) {
+const MAP_METRICS = {
+  growth:     { key: "median_growth",     label: "Median Growth",      unit: "%",  diverging: true,  lo: "#EF6461", mid: "#1B2A45", hi: "#00D4AA", desc: "Median revenue change vs prior year" },
+  distress:   { key: "distress_ratio",    label: "Distress Ratio",     unit: "%",  diverging: false, lo: "#1B3560", hi: "#EF6461",                  desc: "% of firms with revenue change < −50%" },
+  highgrowth: { key: "high_growth_ratio", label: "High-Growth Share",  unit: "%",  diverging: false, lo: "#1B3560", hi: "#A78BFA",                  desc: "% of firms with revenue change > +50%" },
+  companies:  { key: "companies",         label: "Company Count",      unit: "",   diverging: false, lo: "#1B3560", hi: "#00D4AA",                  desc: "Unique companies in this year's dataset" },
+  volatility: { key: "volatility",        label: "Volatility (σ)",     unit: "%",  diverging: false, lo: "#00D4AA", hi: "#EF6461",                  desc: "Standard deviation of revenue change (higher = more uncertain)" },
+};
+const YEAR_TAGS = {
+  all: "All available statement years",
+  2018: "Statement year 2018",
+  2019: "Statement year 2019",
+  2020: "Statement year 2020",
+  2021: "Statement year 2021",
+  2022: "Statement year 2022",
+  2023: "Statement year 2023",
+};
+
+function generateMapInsight(year, metric, data) {
+  const cfg = MAP_METRICS[metric];
+  if (!cfg) return "";
+  const nat = data._national || {};
+  const regions = Object.entries(data)
+    .filter(([k, v]) => k !== "_national" && (v.companies || 0) >= 5)
+    .map(([k, v]) => ({ name: k, val: Number(v[cfg.key] || 0), ...v }))
+    .sort((a, b) => b.val - a.val);
+  if (!regions.length) return "No data available for this selection.";
+  const best  = regions[0];
+  const worst = regions[regions.length - 1];
+
+  if (metric === "growth") {
+    const natG = Number(nat.medianGrowth || 0);
+    const sign = v => v >= 0 ? `+${v.toFixed(1)}%` : `${v.toFixed(1)}%`;
+    const label = year === "all" ? "Across all available statement years" : `In ${year}`;
+    return `${label}, national median revenue change was ${sign(natG)}. ${best.name} led at ${sign(best.val)}, while ${worst.name} lagged at ${worst.val.toFixed(1)}%. The spread between top and bottom region was ${(best.val - worst.val).toFixed(1)}pp.`;
+  }
+  const label = year === "all" ? "Across all available statement years" : `In ${year}`;
+  if (metric === "distress") return `${label}, ${best.name} had the highest distress concentration: ${best.val.toFixed(1)}% of firms suffered severe decline (< -50%). National average: ${(nat.distressRatio || 0).toFixed(1)}%. Interpret this as a screening signal, not a causal claim.`;
+  if (metric === "highgrowth") return `${label}, ${best.name} had the highest high-growth share at ${best.val.toFixed(1)}% of firms above +50%. National average: ${(nat.highGrowthRatio || 0).toFixed(1)}%. Concentration can reflect organic expansion, contracts, M&A, or accounting discontinuities.`;
+  if (metric === "volatility") return `${label}, ${best.name} showed the highest revenue volatility (sigma = ${best.val.toFixed(1)}%), the hardest region to forecast reliably. ${worst.name} had the lowest volatility (sigma = ${worst.val.toFixed(1)}%). High-volatility regions require wider prediction intervals.`;
+  if (metric === "companies") return `${label}, ${best.name} accounts for the largest share of observations (${best.val.toLocaleString()} firms). Model predictions are usually more reliable in high-count regions. Low-count regions carry higher uncertainty and should be interpreted with caution.`;
+  return "";
+}
+
+function ItalyMapTab({ regionMapData, regionByYear, mapYears }) {
   const svgRef   = useRef(null);
   const ttRef    = useRef(null);
   const frameRef = useRef(null);
+  const geoRef   = useRef(null); // cached GeoJSON to avoid re-fetching on year/metric change
 
-  const national  = regionMapData._national || { medianGrowth: 0, medianRevenue: 0, numRegions: 20 };
-  const totalCo   = Object.values(regionMapData).reduce((s, r) => s + (r.companies || 0), 0);
-  const totalProd = Object.values(regionMapData).reduce((s, r) => s + (r.total_revenue || 0), 0);
-  const numReg    = Object.keys(regionMapData).filter(k => k !== '_national' && regionMapData[k].companies > 0).length;
+  const [selectedYear,   setSelectedYear]   = useState("all");
+  const [selectedMetric, setSelectedMetric] = useState("growth");
 
-  useEffect(() => {
-    // Wait for D3 to be available (loaded via CDN with defer)
-    let tries = 0;
-    const tryInit = () => {
-      if (!window.d3) {
-        if (++tries < 40) setTimeout(tryInit, 100);
-        return;
-      }
-      if (!svgRef.current || !ttRef.current || !frameRef.current) return;
-      initMap(window.d3);
-    };
-    tryInit();
-  }, [regionMapData]); // eslint-disable-line react-hooks/exhaustive-deps
+  const yearOptions = ["all", ...(mapYears || [])];
+  const currentData = (regionByYear && regionByYear[selectedYear]) ? regionByYear[selectedYear] : regionMapData;
+  const national    = currentData._national || { medianGrowth: 0, numRegions: 20 };
+  const totalCo     = Object.values(currentData).reduce((s, r) => s + (r.companies || 0), 0);
+  const numReg      = Object.keys(currentData).filter(k => k !== "_national" && currentData[k].companies > 0).length;
 
-  function initMap(d3) {
+  const aiInsight = generateMapInsight(selectedYear, selectedMetric, currentData);
+  const metricCfg = MAP_METRICS[selectedMetric];
+
+  // Build D3 color scale for the chosen metric
+  function buildColorScale(d3, features) {
+    const cfg = MAP_METRICS[selectedMetric];
+    const vals = features.map(f => Number(f.properties.metrics[cfg.key] || 0));
+    const mn = d3.min(vals), mx = d3.max(vals);
+    if (cfg.diverging) {
+      return d3.scaleLinear().domain([mn, 0, mx]).range([cfg.lo, cfg.mid, cfg.hi]).clamp(true);
+    }
+    return d3.scaleLinear().domain([mn, mx]).range([cfg.lo, cfg.hi]).clamp(true);
+  }
+
+  function buildTooltipHtml(d, totalCompanies) {
+    const m    = d.properties.metrics;
+    const name = d.properties.display_name;
+    const nat  = currentData._national || {};
+    const windowLabel = selectedYear === "all" ? "all available map years" : selectedYear;
+    if (!m || m.companies === 0) {
+      return `<div class="map-tt-head"><div><h3 class="map-tt-h3">${name}</h3><div class="map-tt-note">${windowLabel} · no observations</div></div><div class="map-tt-tag">No data</div></div><div class="map-insight">This region has no companies in the ${windowLabel} dataset window.</div>`;
+    }
+    const gv = Number(m.median_growth || 0);
+    const natG = Number(nat.medianGrowth || 0);
+    const gDelta = round2(gv - natG);
+    const gc  = gv >= 0 ? "#16a34a" : "#dc2626";
+    const dc  = gDelta >= 0 ? "#16a34a" : "#dc2626";
+    const share = totalCompanies > 0 ? (m.companies / totalCompanies * 100).toFixed(1) : "0.0";
+    const sec = describeAteco(m.top_sector);
+    const distStr    = (m.distress_ratio    || 0).toFixed(1);
+    const highGrStr  = (m.high_growth_ratio || 0).toFixed(1);
+    const volStr     = (m.volatility        || 0).toFixed(1);
+    const margStr    = (m.avg_margin        || 0).toFixed(1);
+    const natDistStr = (nat.distressRatio   || 0).toFixed(1);
+
+    const insight = (() => {
+      const parts = [];
+      if (gDelta > 6)  parts.push(`outperforms national by +${gDelta.toFixed(1)}pp`);
+      else if (gDelta < -6) parts.push(`underperforms national by ${gDelta.toFixed(1)}pp`);
+      if (Number(distStr) > Number(natDistStr) + 5) parts.push(`elevated distress (${distStr}% vs national ${natDistStr}%)`);
+      if (Number(volStr) > 80) parts.push(`high forecast uncertainty (sigma=${volStr}%)`);
+      if (parts.length === 0) parts.push(`near-national-median performance, lead sector: ${sec.label.split(" ").slice(0,3).join(" ")}`);
+      return parts.slice(0, 2).join("; ") + ".";
+    })();
+
+    return `
+      <div class="map-tt-head">
+        <div>
+          <h3 class="map-tt-h3">${name}</h3>
+          <div class="map-tt-note">${selectedYear === "all" ? "All years" : selectedYear} · revenue_change observations</div>
+        </div>
+        <div class="map-tt-tag">${m.companies.toLocaleString()} firms</div>
+      </div>
+      <div class="map-stats">
+        <div class="map-stat">
+          <div class="map-stat-k">Median Growth</div>
+          <div class="map-stat-v" style="color:${gc}">${gv >= 0 ? "+" : ""}${gv.toFixed(1)}% <span style="font-size:10px;color:${dc};font-weight:600">(${gDelta >= 0 ? "+" : ""}${gDelta.toFixed(1)}pp vs nat)</span></div>
+        </div>
+        <div class="map-stat">
+          <div class="map-stat-k">Distress Ratio</div>
+          <div class="map-stat-v" style="color:#dc2626">${distStr}% <span style="font-size:10px;color:#94a3b8">(nat: ${natDistStr}%)</span></div>
+        </div>
+        <div class="map-stat">
+          <div class="map-stat-k">High-Growth Share</div>
+          <div class="map-stat-v" style="color:#a78bfa">${highGrStr}%</div>
+        </div>
+        <div class="map-stat">
+          <div class="map-stat-k">Volatility</div>
+          <div class="map-stat-v">${volStr}%</div>
+        </div>
+        <div class="map-stat">
+          <div class="map-stat-k">Avg Margin</div>
+          <div class="map-stat-v">${margStr}%</div>
+        </div>
+        <div class="map-stat">
+          <div class="map-stat-k">Dataset Share</div>
+          <div class="map-stat-v">${share}%</div>
+        </div>
+        <div class="map-stat map-stat-wide">
+          <div class="map-stat-k">Top Sector</div>
+          <div class="map-stat-v">${sec.label}${sec.badge ? ` <span class="map-sector-badge">${sec.badge}</span>` : ""}</div>
+        </div>
+      </div>
+      <div class="map-insight"><strong>Quick read:</strong> ${insight}</div>`;
+  }
+
+  function renderMap(d3) {
     const svg  = d3.select(svgRef.current);
     const ttEl = ttRef.current;
+    if (!svg || !ttEl) return;
     svg.selectAll("*").remove();
     const g = svg.append("g");
     const W = 900, H = 900;
-    const totalCompanies = totalCo;
     let pinned = null;
 
-    function buildTooltipHtml(d) {
-      const m    = d.properties.metrics;
-      const sec  = describeAteco(m.top_sector);
-      const share = totalCompanies > 0 ? (m.companies / totalCompanies * 100).toFixed(1) : "0.0";
-      const rank  = m.rank || "-";
-      const numR  = national.numRegions || 20;
+    const features = geoRef.current.features.map(f => {
+      const raw  = f.properties.reg_name || f.properties.name || f.properties.NAME_1 || "";
+      const name = MAP_ALIASES[raw] || raw;
+      f.properties.display_name = name;
+      f.properties.metrics      = currentData[name] || { companies: 0, median_growth: 0, distress_ratio: 0, high_growth_ratio: 0, volatility: 0, avg_margin: 0, top_sector: "N/A" };
+      return f;
+    });
 
-      // Zero-company guard - show N/A for everything
-      if (m.companies === 0) {
-        return `
-          <div class="map-tt-head">
-            <div>
-              <h3 class="map-tt-h3">${d.properties.display_name}</h3>
-              <div class="map-tt-note">Fiscal years 2018-2020 · revenue_change observations</div>
-            </div>
-            <div class="map-tt-tag">0 companies</div>
-          </div>
-          <div class="map-stats">
-            ${["Median Growth","Median Revenue","Revenue >+100%","Revenue <-50%","Dataset Share","Avg Yrs in Biz"].map(k =>
-              `<div class="map-stat"><div class="map-stat-k">${k}</div><div class="map-stat-v" style="color:#94a3b8">N/A</div></div>`
-            ).join("")}
-            <div class="map-stat map-stat-wide"><div class="map-stat-k">Top Sector</div><div class="map-stat-v" style="color:#94a3b8">N/A</div></div>
-          </div>
-          <div class="map-insight"><strong>Quick read:</strong> No data for this region in the 2018-2020 training window.</div>`;
-      }
+    const projection = d3.geoMercator();
+    projection.fitSize([W, H], { type: "FeatureCollection", features });
+    const path       = d3.geoPath(projection);
+    const colorScale = buildColorScale(d3, features);
+    const metricKey  = MAP_METRICS[selectedMetric].key;
+    const totalCos   = features.reduce((s, f) => s + (f.properties.metrics.companies || 0), 0);
 
-      // Growth vs national benchmark
-      const growthVal   = Number(m.median_growth);
-      const natGrowth   = Number(national.medianGrowth);
-      const growthDelta = round2(growthVal - natGrowth);
-      const growthColor = growthVal >= 0 ? "#16a34a" : "#dc2626";
-      const deltaColor  = growthDelta >= 0 ? "#16a34a" : "#dc2626";
-      const growthStr   = `${growthVal >= 0 ? "+" : ""}${growthVal.toFixed(1)}%`;
-      const deltaStr    = `${growthDelta >= 0 ? "+" : ""}${growthDelta.toFixed(1)}pp vs national`;
-
-      // Median revenue vs national
-      const medRev    = m.median_revenue || 0;
-      const natMedRev = national.medianRevenue || 1;
-      const revRatio  = medRev / natMedRev;
-      const medRevStr = fmtEuro(medRev);
-      const natRevStr = fmtEuro(natMedRev);
-
-      // Rich quick-read insight
-      const insight = (() => {
-        const parts = [];
-        if (rank <= 2) parts.push(`Anchor region (#${rank} by dataset size), the model will be disproportionately trained on its patterns`);
-        else if (rank <= 5) parts.push(`Major region (#${rank} of ${numR} by dataset size)`);
-        if (revRatio > 2) parts.push(`large-company region (median revenue ${revRatio.toFixed(1)}× the national median)`);
-        else if (revRatio < 0.5) parts.push(`SME-dominated region (median revenue ${revRatio.toFixed(2)}× the national median)`);
-        if (growthDelta > 5) parts.push(`outperforms the national median by +${growthDelta.toFixed(1)}pp`);
-        else if (growthDelta < -5) parts.push(`underperforms the national median by ${growthDelta.toFixed(1)}pp`);
-        const gt100pct = m.total_obs > 0 ? (m.gt100_count / m.total_obs * 100).toFixed(1) : "0.0";
-        const neg50pct = m.total_obs > 0 ? (m.neg50_count / m.total_obs * 100).toFixed(1) : "0.0";
-        if (m.neg50_count > m.gt100_count + 25) parts.push(`downside stress dominates (${neg50pct}% below -50% vs ${gt100pct}% above +100%), lead sector: ${sec.label}`);
-        else if (m.gt100_count > m.neg50_count + 25) parts.push(`growth extremes dominate (${gt100pct}% of observations above +100%), lead sector: ${sec.label}`);
-        else if (parts.length === 0) parts.push(`balanced upside/downside distribution, lead sector: ${sec.label}`);
-        return parts.slice(0, 3).join("; ") + ".";
-      })();
-
-      return `
-        <div class="map-tt-head">
-          <div>
-            <h3 class="map-tt-h3">${d.properties.display_name}</h3>
-            <div class="map-tt-note">Fiscal years 2018-2020 · revenue_change observations</div>
-          </div>
-          <div class="map-tt-tag">${m.companies.toLocaleString()} companies</div>
-        </div>
-        <div class="map-stats">
-          <div class="map-stat">
-            <div class="map-stat-k">Median Growth</div>
-            <div class="map-stat-v" style="color:${growthColor}">${growthStr} <span style="font-size:10px;color:${deltaColor};font-weight:600">(${deltaStr})</span></div>
-          </div>
-          <div class="map-stat">
-            <div class="map-stat-k">Median Revenue</div>
-            <div class="map-stat-v">${medRevStr} <span style="font-size:10px;color:#667085;font-weight:500">(nat: ${natRevStr})</span></div>
-          </div>
-          <div class="map-stat">
-            <div class="map-stat-k">Revenue &gt;+100%</div>
-            <div class="map-stat-v" style="color:#16a34a">${m.total_obs > 0 ? (m.gt100_count / m.total_obs * 100).toFixed(1) : "0.0"}%</div>
-          </div>
-          <div class="map-stat">
-            <div class="map-stat-k">Revenue &lt;-50%</div>
-            <div class="map-stat-v" style="color:#dc2626">${m.total_obs > 0 ? (m.neg50_count / m.total_obs * 100).toFixed(1) : "0.0"}%</div>
-          </div>
-          <div class="map-stat">
-            <div class="map-stat-k">Dataset Share</div>
-            <div class="map-stat-v">${share}% <span class="map-sector-badge">#${rank} of ${numR}</span></div>
-          </div>
-          <div class="map-stat">
-            <div class="map-stat-k">Avg Yrs in Biz</div>
-            <div class="map-stat-v">${Number(m.avg_years).toFixed(1)}</div>
-          </div>
-          <div class="map-stat map-stat-wide">
-            <div class="map-stat-k">Top Sector</div>
-            <div class="map-stat-v">${sec.label}${sec.badge ? ` <span class="map-sector-badge">${sec.badge}</span>` : ""}</div>
-          </div>
-        </div>
-        <div class="map-insight"><strong>Quick read:</strong> ${insight}</div>`;
-    }
-
-    function showTooltip(event, d) {
-      ttEl.innerHTML = buildTooltipHtml(d);
-      ttEl.classList.add("map-tt-show");
-      moveTooltip(event);
-    }
-    function moveTooltip(event) {
+    function showTT(event, d)  { ttEl.innerHTML = buildTooltipHtml(d, totalCos); ttEl.classList.add("map-tt-show"); moveTT(event); }
+    function moveTT(event) {
       const box = frameRef.current.getBoundingClientRect();
       const pad = 12;
       let left = event.clientX - box.left + pad;
@@ -1373,100 +1486,138 @@ function ItalyMapTab({ regionMapData }) {
       if (left < 8) left = 8;
       if (top  + ttEl.offsetHeight > box.height - 8) top  = box.height - ttEl.offsetHeight - 8;
       if (top  < 8) top  = 8;
-      ttEl.style.left = left + "px";
-      ttEl.style.top  = top  + "px";
+      ttEl.style.left = left + "px"; ttEl.style.top = top + "px";
     }
-    function hideTooltip()  { ttEl.classList.remove("map-tt-show"); }
+    function hideTT()       { ttEl.classList.remove("map-tt-show"); }
     function dimOthers(el)  { d3.selectAll(".map-region").classed("map-region-dimmed", function() { return this !== el; }); }
     function undimAll()     { d3.selectAll(".map-region").classed("map-region-dimmed", false); }
 
-    const geojsonUrl = "https://raw.githubusercontent.com/openpolis/geojson-italy/master/geojson/limits_IT_regions.geojson";
-    d3.json(geojsonUrl).then(geo => {
-      const features = geo.features.map(f => {
-        const raw  = f.properties.reg_name || f.properties.name || f.properties.NAME_1 || "";
-        const name = MAP_ALIASES[raw] || raw;
-        f.properties.display_name = name;
-        f.properties.metrics = regionMapData[name] || { companies: 0, median_growth: 0, gt100_count: 0, neg50_count: 0, avg_years: 0, top_sector: "N/A", total_revenue: 0 };
-        return f;
+    g.selectAll("path").data(features).join("path")
+      .attr("class", "map-region")
+      .attr("d", path)
+      .attr("fill", d => colorScale(Number(d.properties.metrics[metricKey] || 0)))
+      .on("mouseenter", function(event, d) { if (!pinned) showTT(event, d); dimOthers(this); })
+      .on("mousemove",  function(event)    { if (!pinned) moveTT(event); })
+      .on("mouseleave", function()         { if (!pinned) { hideTT(); undimAll(); } })
+      .on("click", function(event, d) {
+        const n = d.properties.display_name;
+        if (pinned === n) { pinned = null; d3.selectAll(".map-region").classed("map-region-pinned", false); hideTT(); undimAll(); }
+        else { pinned = n; d3.selectAll(".map-region").classed("map-region-pinned", x => x.properties.display_name === n); showTT(event, d); dimOthers(this); }
       });
-
-      const projection = d3.geoMercator();
-      projection.fitSize([W, H], { type: "FeatureCollection", features });
-      const path = d3.geoPath(projection);
-
-      const counts     = features.map(d => d.properties.metrics.companies);
-      const colorScale = d3.scaleLinear()
-        .domain([d3.min(counts), d3.max(counts)])
-        .range(["#1B3560", "#00D4AA"]);
-
-      g.selectAll("path")
-        .data(features)
-        .join("path")
-        .attr("class", "map-region")
-        .attr("d", path)
-        .attr("fill", d => colorScale(d.properties.metrics.companies))
-        .on("mouseenter", function(event, d) {
-          if (!pinned) showTooltip(event, d);
-          dimOthers(this);
-        })
-        .on("mousemove", function(event) { if (!pinned) moveTooltip(event); })
-        .on("mouseleave", function() { if (!pinned) { hideTooltip(); undimAll(); } })
-        .on("click", function(event, d) {
-          const name = d.properties.display_name;
-          if (pinned === name) {
-            pinned = null;
-            d3.selectAll(".map-region").classed("map-region-pinned", false);
-            hideTooltip(); undimAll();
-          } else {
-            pinned = name;
-            d3.selectAll(".map-region").classed("map-region-pinned", x => x.properties.display_name === name);
-            showTooltip(event, d); dimOthers(this);
-          }
-        });
-    }).catch(() => {
-      ttEl.innerHTML = "<strong>Map failed to load</strong><br><span style='color:#6b7280'>Check network access to GitHub GeoJSON</span>";
-      ttEl.classList.add("map-tt-show");
-      ttEl.style.left = "24px"; ttEl.style.top = "24px";
-    });
   }
+
+  useEffect(() => {
+    let tries = 0;
+    const tryInit = () => {
+      if (!window.d3) { if (++tries < 40) setTimeout(tryInit, 100); return; }
+      if (!svgRef.current || !ttRef.current || !frameRef.current) return;
+      const d3 = window.d3;
+      if (geoRef.current) { renderMap(d3); return; }
+      const url = "https://raw.githubusercontent.com/openpolis/geojson-italy/master/geojson/limits_IT_regions.geojson";
+      d3.json(url).then(geo => {
+        geoRef.current = geo;
+        renderMap(d3);
+      }).catch(() => {
+        if (ttRef.current) {
+          ttRef.current.innerHTML = "<strong>Map failed to load</strong><br><span style='color:#6b7280'>Check network access</span>";
+          ttRef.current.classList.add("map-tt-show");
+          ttRef.current.style.left = "24px"; ttRef.current.style.top = "24px";
+        }
+      });
+    };
+    tryInit();
+  }, [currentData, selectedMetric]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const btnBase = (active, color) => ({
+    background: active ? `${color}22` : C.cardAlt,
+    border: `1px solid ${active ? color : C.border}`,
+    borderRadius: 6, padding: "5px 12px",
+    color: active ? color : C.muted,
+    fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap",
+  });
+
+  // Build legend gradient
+  const legendGradient = metricCfg.diverging
+    ? `linear-gradient(90deg, ${metricCfg.lo}, ${metricCfg.mid}, ${metricCfg.hi})`
+    : `linear-gradient(90deg, ${metricCfg.lo}, ${metricCfg.hi})`;
+  const legendLeft  = metricCfg.diverging ? "Negative" : "Low";
+  const legendRight = metricCfg.diverging ? "Positive" : "High";
 
   return (
     <>
-      <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
-        Italy Regional Company Landscape
+      {/* HEADER */}
+      <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: "0 0 4px", fontFamily: "'Playfair Display', Georgia, serif" }}>
+        Italian Economic Intelligence — Regional View
       </h2>
-      <p style={{ color: C.muted, fontSize: 14, margin: "0 0 16px" }}>
-        Fiscal years 2018-2020  •  Colored by unique company count  •  Hover or click a region to explore stats
+      <p style={{ color: C.muted, fontSize: 14, margin: "0 0 18px" }}>
+        Select a year and metric to explore how economic conditions evolved across Italy's regions
       </p>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
-        <KPI label="Unique Companies" value={totalCo.toLocaleString()} sub="Across all regions" color={C.accent} />
-        <KPI label="Regions Present" value={numReg} sub="Of 20 Italian regions" color={C.blue} />
-        <KPI label="Total Prod. Value" value={fmtEuro(totalProd)} sub="Sum 2018-2020" color={C.gold} />
-      </div>
-
-      {/* Colour-scale legend */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px", marginBottom: 16 }}>
-        <p style={{ color: C.white, fontSize: 15, fontWeight: 700, margin: "0 0 4px" }}>Regional Density, Unique Companies</p>
-        <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px" }}>Darker blue = more unique companies in the filtered dataset</p>
-        <div style={{ height: 12, borderRadius: 999, background: `linear-gradient(90deg, #1B3560, #1B5E80, #0D9488, ${C.accent})`, marginBottom: 6 }} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.muted }}>
-          <span>Fewer companies</span><span>More companies</span>
+      {/* CONTROLS ROW */}
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 16, alignItems: "flex-start" }}>
+        {/* Year selector */}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px" }}>
+          <p style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>Statement Year</p>
+          <div style={{ display: "flex", gap: 6 }}>
+            {yearOptions.map(yr => (
+              <button key={yr} onClick={() => setSelectedYear(yr)} style={btnBase(selectedYear === yr, yr === "all" ? C.gold : C.accent)}>
+                {yr === "all" ? "All Years" : yr}
+              </button>
+            ))}
+          </div>
+          <p style={{ color: selectedYear === "all" ? C.gold : C.accent, fontSize: 11, margin: "7px 0 0", fontWeight: 600 }}>
+            {YEAR_TAGS[selectedYear]}
+          </p>
+        </div>
+        {/* Metric selector */}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px", flex: 1 }}>
+          <p style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>Color by</p>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {Object.entries(MAP_METRICS).map(([k, m]) => (
+              <button key={k} onClick={() => setSelectedMetric(k)} style={btnBase(selectedMetric === k, k === "distress" ? C.coral : k === "highgrowth" ? C.purple : k === "volatility" ? C.orange : C.accent)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <p style={{ color: C.muted, fontSize: 11, margin: "7px 0 0" }}>{metricCfg.desc}</p>
         </div>
       </div>
 
-      {/* Map frame */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 18 }}>
-        <div
-          ref={frameRef}
-          style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: `radial-gradient(ellipse at 50% 40%, #0F1E3A 0%, ${C.bg} 70%)`, minHeight: 620 }}
-        >
+      {/* KPI STRIP */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <KPI label="Companies" value={totalCo.toLocaleString()} sub={selectedYear === "all" ? "all map years" : `${selectedYear} dataset`} color={C.accent} />
+        <KPI label="Regions" value={numReg} sub="with data" color={C.blue} />
+        <KPI label="National Median" value={`${(national.medianGrowth || 0) >= 0 ? "+" : ""}${(national.medianGrowth || 0).toFixed(1)}%`} sub={selectedYear === "all" ? "pooled revenue change" : `${selectedYear} revenue change`} color={C.gold} />
+        <KPI label="Distress Rate" value={`${(national.distressRatio || 0).toFixed(1)}%`} sub="firms below -50%" color={C.coral} />
+        <KPI label="High-Growth Rate" value={`${(national.highGrowthRatio || 0).toFixed(1)}%`} sub="firms above +50%" color={C.purple} />
+      </div>
+
+      {/* LEGEND */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+        <p style={{ color: C.white, fontSize: 13, fontWeight: 700, margin: "0 0 6px" }}>{metricCfg.label} — Color Scale</p>
+        <div style={{ height: 10, borderRadius: 999, background: legendGradient, marginBottom: 5 }} />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.muted }}>
+          <span>{legendLeft}</span><span>{legendRight}</span>
+        </div>
+      </div>
+
+      {/* MAP FRAME */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 18, marginBottom: 16 }}>
+        <div ref={frameRef} style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: `radial-gradient(ellipse at 50% 40%, #0F1E3A 0%, ${C.bg} 70%)`, minHeight: 620 }}>
           <div ref={ttRef} className="map-tooltip" />
-          <svg ref={svgRef} viewBox="0 0 900 900" style={{ width: "100%", height: 620, display: "block" }} aria-label="Italy EDA regional map" />
+          <svg ref={svgRef} viewBox="0 0 900 900" style={{ width: "100%", height: 620, display: "block" }} aria-label="Italy regional map" />
         </div>
         <p style={{ color: C.muted, fontSize: 11, textAlign: "center", margin: "8px 0 0" }}>
-          GeoJSON: openpolis/geojson-italy (MIT)  •  Click a region to pin tooltip
+          GeoJSON: openpolis/geojson-italy (MIT)  •  Click a region to pin  •  Change year or metric above to update colors
         </p>
+      </div>
+
+      {/* INSIGHT BOX */}
+      <div style={{ background: `${C.blue}0A`, border: `1px solid ${C.blue}28`, borderLeft: `4px solid ${C.blue}`, borderRadius: 10, padding: "14px 18px" }}>
+        <p style={{ color: C.blue, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 5px" }}>
+          Regional Insight — {selectedYear === "all" ? "All Years" : selectedYear} · {metricCfg.label}
+        </p>
+        <p style={{ color: C.light, fontSize: 13, margin: 0, lineHeight: 1.6 }}>{aiInsight}</p>
       </div>
     </>
   );
@@ -2021,26 +2172,48 @@ function RegionalAnalysis({ data, isMobile }) {
       </Card>
 
       {/* Q25-Q75 spread */}
-      <Heading sub="Interquartile range (Q25 to Q75) per region. Wider spread means more volatile revenue outcomes.">Revenue Change Spread: Q25 to Q75</Heading>
+      <Heading sub="Middle 50% outcome band per region. The left segment is downside, the right segment is upside.">Revenue Change Spread: Q25 to Q75</Heading>
       <Card>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {[...data].sort((a, b) => (b.q75 - b.q25) - (a.q75 - a.q25)).map((d, i) => {
             const iqr = d.q75 - d.q25;
-            const maxIQR = Math.max(...data.map(x => x.q75 - x.q25));
-            const pct = maxIQR > 0 ? (iqr / maxIQR) * 100 : 0;
+            const minVal = Math.min(...data.flatMap(x => [x.q25, x.q75, 0]));
+            const maxVal = Math.max(...data.flatMap(x => [x.q25, x.q75, 0]));
+            const span = maxVal - minVal || 1;
+            const pos = v => ((v - minVal) / span) * 100;
+            const q25 = pos(d.q25);
+            const q75 = pos(d.q75);
+            const zero = pos(0);
+            const downsideLeft = Math.min(q25, zero);
+            const downsideWidth = Math.abs(zero - q25);
+            const upsideLeft = Math.min(zero, q75);
+            const upsideWidth = Math.abs(q75 - zero);
+            const spreadColor = i < 3 ? C.coral : i < 8 ? C.gold : C.blue;
             return (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "130px 1fr 110px", gap: 10, alignItems: "center" }}>
-                <span style={{ color: C.light, fontSize: 12 }}>{d.region}</span>
-                <div style={{ background: C.bg, borderRadius: 4, height: 10, overflow: "hidden" }}>
-                  <div style={{ width: `${pct}%`, height: "100%", background: `${C.blue}BB`, borderRadius: 4 }} />
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "150px 1fr 150px", gap: 12, alignItems: "center" }}>
+                <div>
+                  <span style={{ color: C.light, fontSize: 12, fontWeight: 700 }}>{d.region}</span>
+                  <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>n={d.n.toLocaleString()}</div>
                 </div>
-                <span style={{ color: C.muted, fontSize: 11, textAlign: "right" }}>Q25 {d.q25 > 0 ? "+" : ""}{d.q25}% → Q75 +{d.q75}%</span>
+                <div style={{ position: "relative", height: 26, background: C.bg, borderRadius: 7, overflow: "hidden", border: `1px solid ${C.border}` }}>
+                  <div style={{ position: "absolute", left: `${downsideLeft}%`, width: `${downsideWidth}%`, top: 6, height: 12, background: `${C.coral}CC`, borderRadius: 6 }} />
+                  <div style={{ position: "absolute", left: `${upsideLeft}%`, width: `${upsideWidth}%`, top: 6, height: 12, background: `${C.accent}CC`, borderRadius: 6 }} />
+                  <div style={{ position: "absolute", left: `${zero}%`, top: 2, width: 1, height: 22, background: C.white, opacity: 0.32 }} />
+                  <div style={{ position: "absolute", left: `${q25}%`, top: 4, width: 2, height: 16, background: C.coral, borderRadius: 1 }} />
+                  <div style={{ position: "absolute", left: `${q75}%`, top: 4, width: 2, height: 16, background: C.accent, borderRadius: 1 }} />
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ color: spreadColor, fontSize: 12, fontWeight: 800 }}>{iqr.toFixed(1)}pp IQR</span>
+                  <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>
+                    Q25 {d.q25 > 0 ? "+" : ""}{d.q25}% to Q75 {d.q75 > 0 ? "+" : ""}{d.q75}%
+                  </div>
+                </div>
               </div>
             );
           })}
         </div>
-        <p style={{ color: C.muted, fontSize: 11, margin: "12px 0 0", lineHeight: 1.5 }}>
-          IQR measures how spread out the middle 50% of revenue outcomes are. A wider IQR means more companies in that region are pulling hard in opposite directions, making predictions harder.
+        <p style={{ color: C.muted, fontSize: 11, margin: "14px 0 0", lineHeight: 1.5, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+          The zero line separates downside from upside. Wide bands mean regional outcomes are split between sharp contractions and strong expansions, so point forecasts need wider uncertainty ranges.
         </p>
       </Card>
     </>
@@ -2088,7 +2261,7 @@ function SliderInput({ label, value, min, max, step, onChange, format, color }) 
   );
 }
 
-// === SCENARIO SCORING (applies structural relationships from trained Lasso model) ===
+// === SCENARIO SCORING (heuristic stress-test calibrated to model relationships) ===
 function computeScenarioScore({ sector, region, legalForm, prevRevChange, profitMargin, debtAssets, currentRatio, yearsInBusiness, scenario }) {
   let score = 0;
 
@@ -2118,7 +2291,7 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
   score += regionAdj[region] || 0;
 
   // Legal form — governance structure, access to capital, stability
-  const legalFormAdj = { SPA: 5, SRL: 0, SRLS: -4, SC: 2, SNC: -2, SAS: -2 };
+  const legalFormAdj = { SPA: 5, SRL: 0, SAPA: 2, SAS: -2, SNC: -2 };
   score += legalFormAdj[legalForm] || 0;
 
   // Business maturity
@@ -2161,7 +2334,7 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
   // Key driver cards
   const sa  = sectorAdj[Number(sector)] || 0;
   const lfa = legalFormAdj[legalForm]   || 0;
-  const LEGAL_FORM_LABELS = { SPA: "S.p.A.", SRL: "S.r.l.", SRLS: "S.r.l.s.", SC: "Cooperativa", SNC: "S.n.c.", SAS: "S.a.s." };
+  const LEGAL_FORM_LABELS = { SPA: "S.p.A.", SRL: "S.r.l.", SAPA: "S.a.p.a.", SAS: "S.a.s.", SNC: "S.n.c." };
   const drivers = [];
   if (Math.abs(prevRevChange * 0.26) >= 3)
     drivers.push({ label: "Revenue Momentum",  positive: prevRevChange > 0, desc: prevRevChange > 0 ? `Prior +${prevRevChange}% growth carries forward` : `Prior ${prevRevChange}% decline creates headwind` });
@@ -2192,7 +2365,7 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
   if (yearsInBusiness < 3)   flags.push("Young company — limited financial history reduces reliability.");
   if (scenario !== "normal") {
     const scenarioLabels = { recession: "Recession", sectorBoom: "Sector Boom", energyShock: "Energy Shock", ratePressure: "Rate Pressure", geopolitical: "Geopolitical" };
-    flags.push(`Macro overlay active (${scenarioLabels[scenario]}) — base forecast adjusted.`);
+    flags.push(`${scenarioLabels[scenario]} scenario active: the base stress-test estimate has been adjusted.`);
   }
 
   return { point, low, high, regime, regimeColor, regimeBg, confidence, confColor, drivers, action, flags };
@@ -2201,11 +2374,63 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
 // === BUSINESS SCENARIO LAB TAB ===
 // Typical profile derived from dataset medians (2018-2020 training window)
 const TYPICAL_PROFILE = { sector: "46", region: "LOMBARDIA", legalForm: "SRL", prevRevChange: 2, profitMargin: 3.5, debtAssets: 51, currentRatio: 1.1, yearsInBusiness: 17, scenario: "normal" };
+const LEGAL_FORM_OPTS = [
+  { v: "SRL",  l: "S.r.l. — Società a Responsabilità Limitata" },
+  { v: "SPA",  l: "S.p.A. — Società per Azioni" },
+  { v: "SAPA", l: "S.a.p.a. — Soc. in Accomandita per Azioni" },
+  { v: "SAS",  l: "S.a.s. — Società in Accomandita Semplice" },
+  { v: "SNC",  l: "S.n.c. — Società in Nome Collettivo" },
+];
+
+const SCENARIO_INFO = {
+  normal: {
+    label: "Base Case",
+    color: C.accent,
+    title: "Normal operating environment",
+    body: "No extra macro shock is applied. The stress test relies on company fundamentals, sector behavior, region, and prior revenue momentum.",
+    example: "Italy example: ordinary trading conditions, no major demand, rate, energy, or supply-chain disruption."
+  },
+  recession: {
+    label: "Recession",
+    color: C.coral,
+    title: "Demand contraction",
+    body: "Applies a broad negative demand shock. Consumer-facing and cyclical firms usually see weaker orders, slower collections, and lower pricing power.",
+    example: "Italy example: weak domestic consumption or falling B2B orders affecting retail, construction suppliers, and smaller manufacturers."
+  },
+  sectorBoom: {
+    label: "Sector Boom",
+    color: C.blue,
+    title: "Sector-specific tailwind",
+    body: "Amplifies positive momentum for sectors experiencing unusually strong demand. It is not economy-wide growth; it is a targeted sector upside scenario.",
+    example: "Italy example: tourism recovery supporting hotels and food service, public incentives lifting construction, or digital demand supporting IT services."
+  },
+  energyShock: {
+    label: "Energy Shock",
+    color: C.orange,
+    title: "Input-cost pressure",
+    body: "Applies margin pressure from electricity, gas, and fuel costs. Energy-intensive sectors receive an extra penalty.",
+    example: "Italy example: higher gas and electricity costs hitting manufacturing, food production, logistics, and energy-heavy industrial districts."
+  },
+  ratePressure: {
+    label: "Rate Pressure",
+    color: C.gold,
+    title: "Debt-service pressure",
+    body: "Penalizes companies with high debt/assets because refinancing and interest expenses become more painful when rates rise.",
+    example: "Italy example: ECB rate pressure affecting leveraged SMEs, real estate companies, and firms with floating-rate bank debt."
+  },
+  geopolitical: {
+    label: "Geopolitical",
+    color: C.purple,
+    title: "External demand and supply-chain shock",
+    body: "This does not mean Italy itself is unstable. It models external shocks that reach Italian firms through exports, tourism demand, sanctions, shipping routes, or imported inputs.",
+    example: "Italy example: Russia-Ukraine war effects on energy and exports, Red Sea shipping disruption, sanctions exposure, or weaker tourist demand from key origin countries such as Germany."
+  },
+};
 
 function randomProfile() {
   const sectors  = Object.keys(ATECO_NAMES);
   const regions  = ["LOMBARDIA","VENETO","EMILIA-ROMAGNA","LAZIO","TOSCANA","PIEMONTE","CAMPANIA","SICILIA","PUGLIA","MARCHE"];
-  const forms    = ["SRL","SPA","SRLS","SC","SNC","SAS"];
+  const forms    = ["SRL","SPA","SAPA","SNC","SAS"];
   const scenarios= ["normal","normal","normal","recession","sectorBoom","energyShock","ratePressure"];
   const rand     = (lo, hi, dec = 0) => Number((Math.random() * (hi - lo) + lo).toFixed(dec));
   return {
@@ -2244,6 +2469,7 @@ function BusinessScenarioLabTab() {
   }
 
   const result = computeScenarioScore({ sector, region, legalForm, prevRevChange, profitMargin, debtAssets, currentRatio, yearsInBusiness, scenario });
+  const scenarioInfo = SCENARIO_INFO[scenario] || SCENARIO_INFO.normal;
 
   const selectStyle = { width: "100%", background: C.cardAlt, color: C.white, border: `1px solid ${C.border}`, borderRadius: 6, padding: "7px 10px", fontSize: 13, outline: "none" };
 
@@ -2258,7 +2484,7 @@ function BusinessScenarioLabTab() {
       <div style={{ background: `${C.blue}0A`, border: `1px solid ${C.blue}28`, borderLeft: `4px solid ${C.blue}`, borderRadius: 10, padding: "14px 18px", marginBottom: 22 }}>
         <p style={{ color: C.blue, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 5px" }}>How the scoring works</p>
         <p style={{ color: C.light, fontSize: 13, margin: 0, lineHeight: 1.55 }}>
-          The simulator scores a company profile using the structural weights from the trained Lasso model: previous-year momentum, profit margin, leverage, liquidity, legal form, sector historical medians, and regional benchmarks — all derived from the actual training data. Scenario buttons apply multipliers on top (e.g. Recession dampens and shifts negative; Sector Boom amplifies positive momentum). The result is a directional range grounded in your real feature relationships, not a random estimate.
+          The simulator estimates a next-year revenue-change range from the same business signals used by the model: previous-year momentum, profit margin, leverage, liquidity, legal form, sector medians, and regional benchmarks. Scenario buttons apply directional overlays on top. This is a calibrated stress test for live discussion, not a direct call to the trained forecasting model.
         </p>
       </div>
 
@@ -2294,14 +2520,7 @@ function BusinessScenarioLabTab() {
             <div style={{ marginBottom: 14 }}>
               <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 5 }}>Legal Form</span>
               <select value={legalForm} onChange={e => setLegalForm(e.target.value)} style={selectStyle}>
-                {[
-                  { v: "SRL",  l: "S.r.l. — Società a Responsabilità Limitata" },
-                  { v: "SPA",  l: "S.p.A. — Società per Azioni" },
-                  { v: "SRLS", l: "S.r.l.s. — Semplificata" },
-                  { v: "SC",   l: "Società Cooperativa" },
-                  { v: "SNC",  l: "S.n.c. — Società in Nome Collettivo" },
-                  { v: "SAS",  l: "S.a.s. — Società in Accomandita Semplice" },
-                ].map(({ v, l }) => <option key={v} value={v}>{l}</option>)}
+                {LEGAL_FORM_OPTS.map(({ v, l }) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
             <SliderInput label="Years in Business" value={yearsInBusiness} min={1} max={40} step={1} onChange={setYearsInBusiness} format={v => `${v} yrs`} />
@@ -2320,18 +2539,16 @@ function BusinessScenarioLabTab() {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "18px" }}>
             <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 12px", fontFamily: "'Playfair Display', Georgia, serif" }}>Macro Scenario</p>
             <div style={{ display: "grid", gridTemplateColumns: threeCol, gap: 6 }}>
-              {[
-                { key: "normal",       label: "Base Case",     color: C.accent  },
-                { key: "recession",    label: "Recession",     color: C.coral   },
-                { key: "sectorBoom",   label: "Sector Boom",   color: C.blue    },
-                { key: "energyShock",  label: "Energy Shock",  color: C.orange  },
-                { key: "ratePressure", label: "Rate Pressure", color: C.gold    },
-                { key: "geopolitical", label: "Geopolitical",  color: C.purple  },
-              ].map(s => (
-                <button key={s.key} onClick={() => setScenario(s.key)} style={{ background: scenario === s.key ? `${s.color}20` : C.cardAlt, border: `1px solid ${scenario === s.key ? s.color : C.border}`, borderRadius: 6, padding: "8px 4px", color: scenario === s.key ? s.color : C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 0.3, transition: "all 0.15s" }}>
+              {Object.entries(SCENARIO_INFO).map(([key, s]) => (
+                <button key={key} onClick={() => setScenario(key)} style={{ background: scenario === key ? `${s.color}20` : C.cardAlt, border: `1px solid ${scenario === key ? s.color : C.border}`, borderRadius: 6, padding: "8px 4px", color: scenario === key ? s.color : C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 0.3, transition: "all 0.15s" }}>
                   {s.label}
                 </button>
               ))}
+            </div>
+            <div style={{ background: `${scenarioInfo.color}0D`, border: `1px solid ${scenarioInfo.color}30`, borderLeft: `3px solid ${scenarioInfo.color}`, borderRadius: 8, padding: "11px 13px", marginTop: 12 }}>
+              <p style={{ color: scenarioInfo.color, fontSize: 12, fontWeight: 800, margin: "0 0 4px" }}>{scenarioInfo.title}</p>
+              <p style={{ color: C.light, fontSize: 12, margin: "0 0 6px", lineHeight: 1.45 }}>{scenarioInfo.body}</p>
+              <p style={{ color: C.muted, fontSize: 11, margin: 0, lineHeight: 1.45 }}>{scenarioInfo.example}</p>
             </div>
           </div>
         </div>
@@ -2340,7 +2557,7 @@ function BusinessScenarioLabTab() {
         <div>
           {/* Forecast range */}
           <div style={{ background: result.regimeBg, border: `2px solid ${result.regimeColor}45`, borderRadius: 12, padding: "22px", marginBottom: 14, textAlign: "center" }}>
-            <p style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 8px" }}>Projected Revenue Change</p>
+            <p style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 8px" }}>Projected Next-Year Revenue Change</p>
             <p style={{ color: result.regimeColor, fontSize: 50, fontWeight: 800, margin: "0 0 5px", fontFamily: "'Playfair Display', Georgia, serif", lineHeight: 1 }}>
               {result.point > 0 ? "+" : ""}{result.point}%
             </p>
@@ -2384,7 +2601,9 @@ function BusinessScenarioLabTab() {
             <div style={{ background: `${C.coral}09`, border: `1px solid ${C.coral}30`, borderRadius: 10, padding: "12px 16px" }}>
               <p style={{ color: C.coral, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 7px" }}>Flags</p>
               {result.flags.map((f, i) => (
-                <p key={i} style={{ color: C.light, fontSize: 12, margin: i < result.flags.length - 1 ? "0 0 5px" : 0, lineHeight: 1.4 }}>⚠ {f}</p>
+                <p key={i} style={{ color: C.light, fontSize: 12, margin: i < result.flags.length - 1 ? "0 0 6px" : 0, lineHeight: 1.4 }}>
+                  <span style={{ color: C.coral, fontWeight: 800, marginRight: 6 }}>Flag</span>{f}
+                </p>
               ))}
             </div>
           )}
@@ -2392,7 +2611,7 @@ function BusinessScenarioLabTab() {
       </div>
 
       <p style={{ color: C.muted, fontSize: 11, marginTop: 18, lineHeight: 1.5, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-        Scenario Stress-Test  •  Applies feature-level relationships from the trained Lasso model  •  Not a direct model call — use for directional stress-testing, not exact numerical forecasts  •  For precise predictions, run the model on actual financial statement data.
+        Scenario Stress-Test  •  Calibrated to feature-level relationships from the model analysis  •  Not a direct model call — use for directional stress-testing, not exact numerical forecasts  •  For precise predictions, run the trained model on actual financial statement data.
       </p>
     </>
   );
@@ -2413,12 +2632,22 @@ export default function App() {
 
   useEffect(() => {
     // Load CSV + model outputs in parallel; CSV is required, JSON is optional
-    const csvPromise = fetch("/train_data.csv")
+    const trainCsvPromise = fetch("/train_data.csv")
       .then(r => {
         if (!r.ok) throw new Error(`Could not load train_data.csv (HTTP ${r.status})`);
         return r.text();
       })
-      .then(text => { setAppData(processData(parseCSV(text))); });
+      .then(text => parseCSV(text));
+
+    const mapCsvPromise = fetch("/test_features.csv")
+      .then(r => r.ok ? r.text() : "")
+      .then(text => text ? parseCSV(text) : [])
+      .catch(() => []);
+
+    const csvPromise = Promise.all([trainCsvPromise, mapCsvPromise])
+      .then(([trainRows, testRows]) => {
+        setAppData(processData(trainRows, [...trainRows, ...testRows]));
+      });
 
     const jsonPromise = fetch("/model_outputs.json")
       .then(r => r.ok ? r.json() : null)
@@ -2479,7 +2708,7 @@ export default function App() {
     </div>
   );
 
-  const { yearsData, crossYear, uniqueCompanies, totalRows, covidSectorImpact, signalData, regionMapData, regionHistoricalData, correlationData, yearsInBusinessData, outliersData, missingnessData, yearsCorrelationData } = appData;
+  const { yearsData, crossYear, uniqueCompanies, totalRows, covidSectorImpact, signalData, regionMapData, regionByYear, mapYears, regionHistoricalData, correlationData, yearsInBusinessData, outliersData, missingnessData, yearsCorrelationData } = appData;
   const bestYear          = crossYear.reduce((a, b) => a.median > b.median ? a : b);
   const highestVolatility = crossYear.reduce((a, b) => a.std    > b.std    ? a : b);
 
@@ -2532,19 +2761,19 @@ export default function App() {
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", color: C.white }}>
 
       {/* HEADER */}
-      <div style={{ background: C.navy, borderBottom: `1px solid ${C.border}`, padding: "20px 28px 14px", position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+      <div style={{ background: C.navy, borderBottom: `1px solid ${C.border}`, padding: isMobile ? "12px 14px 10px" : "20px 28px 14px", position: "sticky", top: 0, zIndex: 100 }}>
+        <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", gap: 10, marginBottom: 6, flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 5, height: 28, background: C.accent, borderRadius: 3 }} />
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Italian Revenue Forecasting</h1>
+            <h1 style={{ fontSize: isMobile ? 19 : 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', Georgia, serif" }}>Italian Revenue Forecasting</h1>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}30`, borderRadius: 6, padding: "4px 10px", color: C.accent, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>Group 6</span>
-            <span style={{ color: C.muted, fontSize: 12 }}>Deniz Taylan · Yarkin Yavuz · Gustavo Depieri Fioravanti · Koray Aydin</span>
+            <span style={{ color: C.muted, fontSize: 12 }}>{isMobile ? "Deniz Taylan · Group 6" : "Deniz Taylan · Yarkin Yavuz · Gustavo Depieri Fioravanti · Koray Aydin"}</span>
           </div>
         </div>
-        <p style={{ color: C.muted, fontSize: 13, margin: "2px 0 14px 15px", letterSpacing: 0.4 }}>
-          ExpertAI × LUISS  •  {uniqueCompanies.toLocaleString()} Italian companies  •  Financial statements 2018–2022  •  Annual revenue movement forecasting
+        <p style={{ color: C.muted, fontSize: isMobile ? 12 : 13, margin: isMobile ? "4px 0 10px" : "2px 0 14px 15px", letterSpacing: 0.4, lineHeight: 1.45 }}>
+          ExpertAI × LUISS  •  {uniqueCompanies.toLocaleString()} Italian companies  •  Financial statements 2018–2023  •  Annual revenue movement forecasting
           {"  •  "}
           <a href="https://github.com/deniztaylan06/Expert_AI_project/tree/main" target="_blank" rel="noopener noreferrer" style={{ color: C.accent, textDecoration: "none", fontWeight: 600 }}>
             GitHub ↗
@@ -2573,11 +2802,11 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ padding: "20px 28px 40px", maxWidth: 1180, margin: "0 auto" }}>
+      <div className="main-content" style={{ padding: isMobile ? "12px 14px 32px" : "20px 28px 40px", maxWidth: 1180, margin: "0 auto", width: "100%" }}>
 
         {tab === "overview" && <DataOverviewSection correlationData={correlationData} yearsInBusinessData={yearsInBusinessData} uniqueCompanies={uniqueCompanies} totalRows={totalRows} outliersData={outliersData} missingnessData={missingnessData} />}
         {["2018","2019","2020"].includes(tab) && <YearSection yr={Number(tab)} yearsData={yearsData} yearsCorrelation={yearsCorrelationData[Number(tab)]} sharedDomains={sharedDomains} />}
-        {tab === "map" && <ItalyMapTab regionMapData={regionMapData} />}
+        {tab === "map" && <ItalyMapTab regionMapData={regionMapData} regionByYear={regionByYear} mapYears={mapYears} />}
 
         {tab === "signals" && (
           <>
@@ -4379,7 +4608,7 @@ export default function App() {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "0 0 20px" }}>
               <div style={{ flex: 1, height: 1, background: C.border }} />
-              <span style={{ color: "#F472B6", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, whiteSpace: "nowrap" }}>Error Analysis · Caveats · Safe Use</span>
+              <span style={{ color: "#F472B6", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, whiteSpace: "nowrap" }}>Part II · Error Analysis</span>
               <div style={{ flex: 1, height: 1, background: C.border }} />
             </div>
 
@@ -4561,6 +4790,11 @@ export default function App() {
           </>
         )}
 
+        {/* ═══════════════════════════════════════════════════════
+            SCENARIO LAB
+        ═══════════════════════════════════════════════════════ */}
+        {tab === "scenario" && <BusinessScenarioLabTab />}
+
         {/* ── Inline Prev / Next navigation at bottom of every tab ── */}
         {(() => {
           const idx  = TAB_ORDER.indexOf(tab);
@@ -4577,7 +4811,7 @@ export default function App() {
             transition: "background 0.15s, border-color 0.15s",
           });
           return (
-            <div style={{ marginTop: 32, paddingTop: 20, borderTop: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div className="presentation-nav" style={{ marginTop: 32, paddingTop: 20, borderTop: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <button disabled={!prev} onClick={() => prev && setTab(prev)} title={prev ? `← ${TAB_LABELS[prev]}` : ""} style={btnStyle(!!prev)}>
                 ← {prev ? TAB_LABELS[prev] : "Prev"}
               </button>
@@ -4590,11 +4824,6 @@ export default function App() {
             </div>
           );
         })()}
-
-        {/* ═══════════════════════════════════════════════════════
-            SCENARIO LAB
-        ═══════════════════════════════════════════════════════ */}
-        {tab === "scenario" && <BusinessScenarioLabTab />}
 
         <div style={{ marginTop: 20, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <p style={{ color: C.muted, fontSize: 11, margin: 0 }}>
