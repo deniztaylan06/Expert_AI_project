@@ -151,7 +151,7 @@ function computeRegionMapData(rows) {
   return result;
 }
 
-// === REGIONAL HISTORICAL DATA (all years 2018-2022, revenue_change_next) ===
+// === REGIONAL HISTORICAL DATA (labeled training source years, revenue_change_next) ===
 function computeRegionHistoricalData(rows) {
   const valid = rows.filter(r =>
     r.revenue_change_next !== null && isFinite(r.revenue_change_next) &&
@@ -176,7 +176,7 @@ function computeRegionHistoricalData(rows) {
   return result.sort((a, b) => b.median - a.median);
 }
 
-// === SECTOR HISTORICAL DATA (all years 2018-2022, revenue_change_next) ===
+// === SECTOR HISTORICAL DATA (labeled training source years, revenue_change_next) ===
 // === COVID SECTOR IMPACT (uses raw revenue_change column) ===
 // revenue_change on a fiscal_year=Y row = change from Y-1 to Y
 function computeCovidSectorImpact(rows, topSectorCodes) {
@@ -2075,9 +2075,9 @@ function RegionalAnalysis({ data, isMobile }) {
       </div>
 
       <Heading
-        sub={`Median revenue_change_next by region across all labeled years (2018-2022). Computed from ${data.reduce((s, d) => s + d.n, 0).toLocaleString()} company-year observations.`}
+        sub={`Median revenue_change_next by region across labeled source years 2018-2020, predicting 2019-2021. Computed from ${data.reduce((s, d) => s + d.n, 0).toLocaleString()} company-year observations.`}
         insight={`${data[0]?.region} leads at ${data[0]?.median > 0 ? "+" : ""}${data[0]?.median}% median. ${data[data.length-1]?.region} trails at ${data[data.length-1]?.median}%. National weighted median: ${nationalMedian > 0 ? "+" : ""}${nationalMedian}%.`}
-      >Regional Revenue Growth: 2018-2022</Heading>
+      >Regional Revenue Growth: Labeled Training Window</Heading>
 
       <div style={{ display: "grid", gridTemplateColumns: part2FourCol, gap: 12, marginBottom: 20 }}>
         {[
@@ -2261,8 +2261,14 @@ function SliderInput({ label, value, min, max, step, onChange, format, color }) 
   );
 }
 
+function fmtScenarioProductionValue(millions) {
+  if (millions >= 1000) return `€${(millions / 1000).toFixed(millions >= 10000 ? 0 : 1)}B`;
+  if (millions >= 1) return `€${millions.toFixed(millions >= 100 ? 0 : 1)}M`;
+  return `€${Math.round(millions * 1000).toLocaleString()}K`;
+}
+
 // === SCENARIO SCORING (heuristic stress-test calibrated to model relationships) ===
-function computeScenarioScore({ sector, region, legalForm, prevRevChange, profitMargin, debtAssets, currentRatio, yearsInBusiness, scenario }) {
+function computeScenarioScore({ sector, region, legalForm, productionValueM, prevRevChange, profitMargin, debtAssets, currentRatio, yearsInBusiness, scenario }) {
   let score = 0;
 
   // Momentum — strongest predictor in the Lasso model
@@ -2276,6 +2282,17 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
 
   // Liquidity
   score += currentRatio >= 3 ? 8 : currentRatio >= 2 ? 4 : currentRatio >= 1.2 ? 1 : currentRatio >= 0.8 ? -5 : -13;
+
+  // Company size — revenue-change percentages are structurally more volatile for smaller firms
+  const sizeAdj =
+    productionValueM < 1     ? 18 :
+    productionValueM < 5     ? 13 :
+    productionValueM < 25    ? 8  :
+    productionValueM < 100   ? 4  :
+    productionValueM < 500   ? 0  :
+    productionValueM < 2000  ? -4 :
+    productionValueM < 10000 ? -8 : -13;
+  score += sizeAdj;
 
   // Sector historical medians (from ATECO training data)
   const sectorAdj = { 62: 12, 71: 8, 41: 6, 43: 5, 68: 4, 46: 4, 82: 3, 77: 2, 47: 2, 25: 2, 10: 1, 45: 0, 56: -1 };
@@ -2309,6 +2326,9 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
   // Confidence interval width
   let unc = 14;
   if (Math.abs(prevRevChange) > 50)             unc += 7;
+  if (productionValueM < 5)                     unc += 8;
+  else if (productionValueM < 25)               unc += 4;
+  else if (productionValueM > 10000)            unc += 3;
   if (debtAssets > 65)                          unc += 5;
   if ([62, 68, 41].includes(Number(sector)))    unc += 5;
   if (scenario !== "normal")                    unc += 4;
@@ -2336,6 +2356,8 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
   const lfa = legalFormAdj[legalForm]   || 0;
   const LEGAL_FORM_LABELS = { SPA: "S.p.A.", SRL: "S.r.l.", SAPA: "S.a.p.a.", SAS: "S.a.s.", SNC: "S.n.c." };
   const drivers = [];
+  if (sizeAdj >= 8) drivers.push({ label: "Small-Firm Volatility", positive: true, desc: `${fmtScenarioProductionValue(productionValueM)} production value — percentage growth can move sharply from a smaller base` });
+  else if (sizeAdj <= -8) drivers.push({ label: "Large-Company Gravity", positive: false, desc: `${fmtScenarioProductionValue(productionValueM)} production value — very large firms tend to have lower percentage growth` });
   if (Math.abs(prevRevChange * 0.26) >= 3)
     drivers.push({ label: "Revenue Momentum",  positive: prevRevChange > 0, desc: prevRevChange > 0 ? `Prior +${prevRevChange}% growth carries forward` : `Prior ${prevRevChange}% decline creates headwind` });
   if (profitMargin >= 5)     drivers.push({ label: "Margin Strength",   positive: true,  desc: `${profitMargin.toFixed(1)}% profit margin above typical threshold` });
@@ -2361,6 +2383,8 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
   const flags = [];
   if (Math.abs(point) > 100) flags.push("Extreme forecast range — verify inputs. May indicate a structural event.");
   if (debtAssets > 75)       flags.push("Very high leverage — result is sensitive to interest rate movements.");
+  if (productionValueM < 1)   flags.push("Micro-company scale — percentage revenue change is highly volatile and less reliable.");
+  if (productionValueM > 10000) flags.push("Mega-company scale — large absolute revenue movements may appear as modest percentage changes.");
   if (currentRatio < 0.8)    flags.push("Liquidity below critical threshold — monitor short-term obligations closely.");
   if (yearsInBusiness < 3)   flags.push("Young company — limited financial history reduces reliability.");
   if (scenario !== "normal") {
@@ -2373,7 +2397,7 @@ function computeScenarioScore({ sector, region, legalForm, prevRevChange, profit
 
 // === BUSINESS SCENARIO LAB TAB ===
 // Typical profile derived from dataset medians (2018-2020 training window)
-const TYPICAL_PROFILE = { sector: "46", region: "LOMBARDIA", legalForm: "SRL", prevRevChange: 2, profitMargin: 3.5, debtAssets: 51, currentRatio: 1.1, yearsInBusiness: 17, scenario: "normal" };
+const TYPICAL_PROFILE = { sector: "46", region: "LOMBARDIA", legalForm: "SRL", productionValueM: 80, prevRevChange: 2, profitMargin: 3.5, debtAssets: 51, currentRatio: 1.1, yearsInBusiness: 17, scenario: "normal" };
 const LEGAL_FORM_OPTS = [
   { v: "SRL",  l: "S.r.l. — Società a Responsabilità Limitata" },
   { v: "SPA",  l: "S.p.A. — Società per Azioni" },
@@ -2437,6 +2461,7 @@ function randomProfile() {
     sector:          sectors[Math.floor(Math.random() * sectors.length)],
     region:          regions[Math.floor(Math.random() * regions.length)],
     legalForm:       forms[Math.floor(Math.random() * forms.length)],
+    productionValueM: Math.pow(10, rand(-1, 4.6, 2)),
     prevRevChange:   rand(-30, 60),
     profitMargin:    rand(-8, 20, 1),
     debtAssets:      rand(15, 85),
@@ -2450,6 +2475,7 @@ function BusinessScenarioLabTab() {
   const [sector,          setSector]          = useState(TYPICAL_PROFILE.sector);
   const [region,          setRegion]          = useState(TYPICAL_PROFILE.region);
   const [legalForm,       setLegalForm]       = useState(TYPICAL_PROFILE.legalForm);
+  const [productionLog,   setProductionLog]   = useState(Math.log10(TYPICAL_PROFILE.productionValueM));
   const [prevRevChange,   setPrevRevChange]   = useState(TYPICAL_PROFILE.prevRevChange);
   const [profitMargin,    setProfitMargin]    = useState(TYPICAL_PROFILE.profitMargin);
   const [debtAssets,      setDebtAssets]      = useState(TYPICAL_PROFILE.debtAssets);
@@ -2463,12 +2489,14 @@ function BusinessScenarioLabTab() {
 
   function applyProfile(p) {
     setSector(p.sector); setRegion(p.region); setLegalForm(p.legalForm);
+    setProductionLog(Math.log10(p.productionValueM));
     setPrevRevChange(p.prevRevChange); setProfitMargin(p.profitMargin);
     setDebtAssets(p.debtAssets); setCurrentRatio(p.currentRatio);
     setYearsInBusiness(p.yearsInBusiness); setScenario(p.scenario);
   }
 
-  const result = computeScenarioScore({ sector, region, legalForm, prevRevChange, profitMargin, debtAssets, currentRatio, yearsInBusiness, scenario });
+  const productionValueM = Math.pow(10, productionLog);
+  const result = computeScenarioScore({ sector, region, legalForm, productionValueM, prevRevChange, profitMargin, debtAssets, currentRatio, yearsInBusiness, scenario });
   const scenarioInfo = SCENARIO_INFO[scenario] || SCENARIO_INFO.normal;
 
   const selectStyle = { width: "100%", background: C.cardAlt, color: C.white, border: `1px solid ${C.border}`, borderRadius: 6, padding: "7px 10px", fontSize: 13, outline: "none" };
@@ -2484,7 +2512,7 @@ function BusinessScenarioLabTab() {
       <div style={{ background: `${C.blue}0A`, border: `1px solid ${C.blue}28`, borderLeft: `4px solid ${C.blue}`, borderRadius: 10, padding: "14px 18px", marginBottom: 22 }}>
         <p style={{ color: C.blue, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, margin: "0 0 5px" }}>How the scoring works</p>
         <p style={{ color: C.light, fontSize: 13, margin: 0, lineHeight: 1.55 }}>
-          The simulator estimates a next-year revenue-change range from the same business signals used by the model: previous-year momentum, profit margin, leverage, liquidity, legal form, sector medians, and regional benchmarks. Scenario buttons apply directional overlays on top. This is a calibrated stress test for live discussion, not a direct call to the trained forecasting model.
+          The simulator estimates a next-year revenue-change range from the same business signals used by the model: company size, previous-year momentum, profit margin, leverage, liquidity, legal form, sector medians, and regional benchmarks. Scenario buttons apply directional overlays on top. This is a calibrated stress test for live discussion, not a direct call to the trained forecasting model.
         </p>
       </div>
 
@@ -2524,6 +2552,16 @@ function BusinessScenarioLabTab() {
               </select>
             </div>
             <SliderInput label="Years in Business" value={yearsInBusiness} min={1} max={40} step={1} onChange={setYearsInBusiness} format={v => `${v} yrs`} />
+            <SliderInput
+              label="Production Value"
+              value={productionLog}
+              min={-1}
+              max={5}
+              step={0.05}
+              onChange={setProductionLog}
+              format={v => fmtScenarioProductionValue(Math.pow(10, v))}
+              color={productionValueM < 25 ? C.purple : productionValueM > 2000 ? C.gold : C.accent}
+            />
           </div>
 
           {/* Financial ratios */}
@@ -4054,13 +4092,6 @@ export default function App() {
                 ))}
               </div>
 
-              <div style={{ background: `${C.accent}0A`, border: `1px solid ${C.accent}22`, borderRadius: 10, padding: "14px 18px", marginTop: 16 }}>
-                <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: "0 0 6px" }}>How ExpertAI's NLP Capabilities Close the Gap</p>
-                <p style={{ color: C.light, fontSize: 13, margin: 0, lineHeight: 1.55 }}>
-                  The current model reads structured financial ratios. ExpertAI's NLP layer could extract forward-looking signals from annual reports, management commentary, risk disclosures, regulatory filings, and sector news. A company that flags cost pressure or contract loss in its annual report will show revenue stress in the next filing — NLP captures that signal months earlier than any balance sheet can.
-                </p>
-              </div>
-
             </>
           );
         })()}
@@ -4653,7 +4684,7 @@ export default function App() {
                   { icon: "✗", title: "M&A and restructuring events", body: "The equity_gap flag captures ~60% of these, but the remaining silent mergers produce asset jumps that look like organic growth. TMAPE₉₅ = 164% is partly driven by these." },
                   { icon: "✗", title: "Hypergrowth companies (>500% revenue change)", body: "35% of the dataset is in the >100% bucket. The P5/P95 clipping deliberately de-weights these during training, so predictions in the tail are systematically downward-biased." },
                   { icon: "✗", title: "Companies with only 1–2 years of data", body: "Lag features (t-1 ratios, tier shift, momentum) are all null. The model receives near-zero signal and falls back to sector-average predictions." },
-                  { icon: "✗", title: "Post-2022 predictions", body: "The training window ends at 2021. Any structural change after that (interest rate hikes, supply chain resets) is invisible to the model." },
+                  { icon: "✗", title: "New macro regimes", body: "The selected model was validated on 2021 and the final forecast retrains through 2022. Any new structural change after the latest labeled year still requires retraining and fresh validation." },
                   { icon: "✗", title: "Very small companies (<€5M)", body: "Q1 tier shows high variance in the target (IQR > 600pp). The model knows the median direction but individual company errors are enormous." },
                 ].map((p, i) => (
                   <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
@@ -4704,9 +4735,12 @@ export default function App() {
             <Heading sub="Structural limitations that cannot be engineered away — they are properties of the data-generating process, not bugs in the model" insight="Acknowledging these honestly is more useful than hiding them — any deployment must have human review of flagged cases">Known Caveats & Limitations</Heading>
             <div style={{ display: "grid", gridTemplateColumns: part2ThreeCol, gap: 12 }}>
               {[
-                { icon: "⏱", color: C.gold,   title: "Temporal Scope",       body: "Model trained on 2018–2020, evaluated on 2021. Any macro regime shift after 2021 (rate cycles, energy crisis, AI-driven productivity) is out-of-distribution. Do not apply to 2023+ without retraining." },
+                { icon: "⏱", color: C.gold,   title: "Temporal Scope",       body: "The selected workflow is validated on a locked 2021 holdout. The final 2024 forecast is retrained through 2022, but any new macro regime after the latest labeled year still needs fresh validation." },
                 { icon: "🌍", color: C.blue,   title: "Italy-Only",            body: "All companies are Italian, governed by Italian ATECO sector codes, Italian legal forms (SPA, SRL…), and Italian regional economic patterns. The feature engineering is jurisdiction-specific and should not be ported to other markets without re-calibration." },
                 { icon: "📑", color: C.accent, title: "Balance-Sheet Input",   body: "The model reads audited financial statements. It cannot see operational KPIs (orders, headcount, web traffic). A company can look healthy on-paper while facing hidden operational distress." },
+                { icon: "📆", color: C.blue,   title: "Annual Frequency",      body: "The data is annual, so the model cannot learn Q1-Q4 seasonality or intra-year turning points. Quarterly statements would provide higher-frequency observations and make seasonal interaction features possible." },
+                { icon: "🧩", color: C.orange, title: "Survivorship Bias",     body: "If a company disappears from the panel, we do not assume bankruptcy or zero revenue. Its next-year target is treated as unavailable and excluded. This is conservative, but it can underrepresent the most severe business exits without explicit status data." },
+                { icon: "📈", color: C.purple, title: "Limited Time-Series Depth", body: "With only a short annual panel, company-level time-series models such as ARIMAX are not well supported. A longer quarterly history would make exogenous-variable forecasting more realistic." },
                 { icon: "📉", color: C.coral,  title: "Tail Bias",             body: "P5/P95 training-target clipping systematically underestimates extreme outcomes. A company predicted at +80% could actually hit +500%. Treat any prediction above +60% as 'high-growth, magnitude uncertain'." },
                 { icon: "🔗", color: C.purple, title: "Lag Dependency",        body: "All predictors are from year T. The model assumes the company's business model at T is predictive of T+1. For companies undergoing strategic pivots or M&A in T itself, this assumption breaks." },
                 { icon: "📊", color: C.teal,   title: "Aggregation Level",     body: "Predictions are at the fiscal-year × company level. They say nothing about quarterly patterns, seasonal volatility, or intra-year cash flow stress. Do not use for short-term liquidity assessments." },
@@ -4770,7 +4804,7 @@ export default function App() {
                 { color: C.coral,  icon: "🚩", title: "equity_gap ≤ -4%",          body: "Capital withdrawal signal. The model sees this as a negative predictor but can't distinguish from a legitimate dividend. Always check manually." },
                 { color: C.gold,   icon: "⚡",  title: "Predicted change > +150%",   body: "Any prediction this extreme is almost certainly an underestimate of a structural event (M&A). Flag for qualitative review, never use as a point estimate." },
                 { color: C.purple, icon: "🔍", title: "1–2 years in dataset",        body: "Lag features are all null. The model is running on sector-average priors only. Prediction uncertainty is ×3 the normal band." },
-                { color: C.blue,   icon: "📅", title: "2022+ fiscal year input",     body: "The model is extrapolating outside its training distribution. Predictions may be directionally correct but magnitude confidence is low." },
+                { color: C.blue,   icon: "📅", title: "Latest-year inputs",          body: "2023 financial statements can be scored for 2024, but no 2024 labels exist yet. Treat those outputs as forward-looking rankings until the next audited year confirms them." },
               ].map((w, i) => (
                 <div key={i} style={{ background: C.card, border: `2px solid ${w.color}40`, borderTop: `4px solid ${w.color}`, borderRadius: 10, padding: "16px 18px" }}>
                   <div style={{ fontSize: 24, marginBottom: 8 }}>{w.icon}</div>
