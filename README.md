@@ -1,191 +1,165 @@
-# 🏦 Italian Financial Challenge
+# Italian Financial Challenge — Revenue Change Forecasting
 
-Welcome to the Italian Financial Challenge! This repository contains all the materials you need to complete your machine learning project on Italian corporate financial data.
+**Challenge 3 · LUISS University · Academic Year 2025/2026**
 
----
-
-## 📋 Start Here
-
-**New to this challenge?** Follow these steps:
-
-1. 📖 **[Read the Challenge Description](docs/challenge_description.md)** - Complete guide to all three challenges, evaluation criteria, and requirements
-2. 📊 **[Review the Data Dictionary](docs/data_dictionary.md)** - Understand all variables in the dataset
-3. 💻 **[Setup your environment](#-quick-setup)** (see below)
-4. 🚀 **[Start coding](notebooks/starter_template.ipynb)** - Use the provided template or create your own
+**Team:** Deniz Mehmet Taylan · Gustavo Depieri Fioravanti · Yarkin Yavuz · Koray Aydin
 
 ---
 
-## 🎯 The Challenge
+## What We Do
 
-Choose **ONE** of three machine learning challenges:
+We forecast `revenue_change_next` — the percentage change in a company's production value over the next fiscal year — using panel financial statements from Italian companies covering 2018–2023.
 
-1. **Bankruptcy Prediction** (Medium) - Predict if a company will go bankrupt within 12 months
-2. **Financial Health Classification** (Medium-High) - Classify companies into 4 health categories (A/B/C/D)
-3. **Revenue Forecasting** (High) - Predict next year's revenue change (%)
+This is a hard regression problem for two reasons:
+- The target distribution is **heavy-tailed**: a small number of collapse and breakout events dominate naive error metrics.
+- **Near-zero denominators** make raw MAPE unstable when current-year revenue is very small.
 
-📖 **See [Challenge Description](docs/challenge_description.md) for full details**
-
----
-
-## 🚀 Quick Setup
-
-```bash
-# 1. Clone this repository
-git clone <your-repo-url>
-cd italian-financial-challenge
-
-# 2. Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Launch Jupyter
-jupyter notebook
-
-# 5. Open notebooks/starter_template.ipynb and start coding!
-```
+Our solution is built in two parts:
+1. A **machine learning pipeline** (`notebook/revenue_change.ipynb`) that trains, evaluates, and exports predictions.
+2. An **interactive React dashboard** (`vite-project/`) that visualises the training data, model signals, and predictions.
 
 ---
 
-## 📊 Available Data
+## Why This Matters
 
-### Training Data
-- **File**: `data/processed/train_data.csv`
-- **Size**: 11,828 company-year observations (2018-2021)
-- **Targets**: All 3 target variables included
-
-### Test Data
-- **File**: `data/processed/test_features.csv`
-- **Size**: 5,811 company-year observations (2022-2023)
-- **Targets**: NOT included (for final evaluation only)
-
-**Variables**: 25+ features including company info, balance sheet, income statement, and financial ratios
-
-📊 **See [Data Dictionary](docs/data_dictionary.md) for complete variable descriptions**
+Predicting revenue change from annual balance sheets is not a solved problem. Accounting statements are noisy, firms enter and exit the panel for structural reasons, and the same reported growth rate can mean very different things depending on a firm's size, sector, and recent history. Our approach builds interpretable, leakage-safe features grounded in financial economics, then evaluates them with metrics that stay meaningful even in the difficult tail regions.
 
 ---
 
-## 📁 Repository Structure
+## How We Do It
+
+### Machine Learning Pipeline
+
+| Stage | Key Decisions |
+|---|---|
+| **Target** | Fit on `log(production_value_next)`; convert predictions back to `revenue_change_next` |
+| **Splits** | Strictly time-based — `2018–2019 → 2020` for selection, `2018–2020 → 2021` locked holdout |
+| **Feature families** | Lagged growth & acceleration · margin quality · balance-sheet pressure · peer-relative context · regime/event flags |
+| **Models** | Lasso (clean base) + CatBoost (sensitivity check) |
+| **Evaluation** | TMAPE (95% coverage), WAPE, SMAPE, directional accuracy, Spearman rank correlation |
+| **Add-on** | Five-bucket and three-bucket regime classifiers for business communication |
+
+No random train/test splits are used anywhere. All scaling, imputation, and grouped priors are fit on training years only.
+
+### Interactive Dashboard
+
+A single-page React application loads the training CSV directly in the browser and computes all charts client-side — no backend required. Built with Vite, Recharts, and `qrcode.react`.
+
+Charts included: revenue-change bucket distribution · sector COVID impact · regional heatmap · revenue-tier outcome rates · tier persistence · equity-gap signal · growth momentum · correlation matrices · 2024 forward predictions.
+
+---
+
+## Project Structure
 
 ```
-italian-financial-challenge/
-├── README.md                          # This file
-├── requirements.txt                   # Python dependencies
+Expert_AI_project/
+├── notebook/
+│   └── revenue_change.ipynb       # Full ML pipeline (EDA → features → models → export)
 │
-├── docs/
-│   ├── challenge_description.md       # ⭐ Complete challenge guide
-│   └── data_dictionary.md             # ⭐ Variable explanations
+├── outputs/
+│   ├── revenue_change_2024_predictions.csv        # Forward-looking 2024 forecasts
+│   └── revenue_change_final_audit_predictions.csv # Observable 2022→2023 audit export
 │
 ├── data/processed/
-│   ├── train_data.csv                 # Training data
-│   └── test_features.csv              # Test data (no targets)
+│   ├── train_data.csv             # 11,828 company-year observations (2018–2021)
+│   └── test_features.csv          # 5,811 rows (2022–2023), no target
 │
-├── notebooks/
-│   └── starter_template.ipynb         # Jupyter template (optional)
+├── vite-project/                  # React dashboard
+│   ├── src/App.jsx                # All chart logic and UI
+│   └── package.json
 │
-├── src/                               # Your Python modules (optional)
-├── configs/                           # Your configs (optional)
-└── tests/                             # Your tests (optional)
+├── docs/
+│   ├── challenge.md               # Challenge overview
+│   ├── challenge_description.md   # Full challenge specification
+│   └── data_dictionary.md         # Variable definitions
+│
+├── images/                        # EDA plots exported from notebook
+└── requirements.txt               # Python dependencies
 ```
 
 ---
 
-## 📝 What You Need to Submit
+## Running the Code
 
-1. **Jupyter Notebook** (.ipynb) - Your complete analysis
-3. **Presentation Slides** (PDF/PPTX) - if you think it's necessary
+### 1. Jupyter Notebook (ML Pipeline)
 
-📖 **See [Challenge Description](docs/challenge_description.md) for evaluation criteria and grading**
-
----
-
-## 💡 Key Tips
-
-⚠️ **Avoid Data Leakage:**
-- Use temporal splits (train on earlier years, test on later years)
-- Fit scalers/imputers on training data only
-- Never use future information to predict the past
-
-⚡ **Handle Class Imbalance** (Challenges 1 & 2):
-- Use F1-score, not accuracy
-- Try SMOTE, class weights, or threshold tuning
-
-🧠 **Focus on Interpretation:**
-- Feature importance analysis
-- Error analysis (which cases are misclassified?)
-- Business insights (translate to non-technical language)
-
-📖 **See [Challenge Description](docs/challenge_description.md) for detailed tips and best practices**
-
----
-
-## 🆘 Common Issues
-
-**"Module not found"**
 ```bash
-source venv/bin/activate  # Activate environment first
+# Clone the repo
+git clone <your-repo-url>
+cd Expert_AI_project
+
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Launch Jupyter and open the notebook
+jupyter notebook notebook/revenue_change.ipynb
 ```
 
-**"File not found"**
+Run all cells top-to-bottom. The notebook is self-contained — it reads from `data/processed/` and writes prediction CSVs to `outputs/`.
+
+> **Python version:** 3.9 or higher recommended.
+
+---
+
+### 2. React Dashboard (Interactive Visualisation)
+
 ```bash
-pwd  # Check you're in the right directory
-ls data/processed/  # Should show: train_data.csv, test_features.csv
+cd vite-project
+
+# Install Node dependencies
+npm install
+
+# Start the development server
+npm run dev
 ```
 
-**"My model performance is too low/high"**
-- Too low: Check for proper imbalance handling, feature engineering
-- Too high: Check for data leakage (temporal split, scaling)
+Open [http://localhost:5173](http://localhost:5173) in your browser. The app loads `data/processed/train_data.csv` and renders all charts client-side.
 
-📖 **See [Challenge Description](docs/challenge_description.md) for more troubleshooting**
+To build a static bundle for deployment:
 
----
+```bash
+npm run build    # outputs to vite-project/dist/
+npm run preview  # preview the production build locally
+```
 
-## 🎯 Performance Targets
-
-| Challenge | Minimum | Good | Excellent |
-|-----------|---------|------|-----------|
-| **Bankruptcy** | F1 > 0.45 | F1 = 0.55-0.65 | F1 > 0.65 |
-| **Health Class** | Weighted F1 > 0.60 | Weighted F1 = 0.65-0.75 | Weighted F1 > 0.75 |
-| **Revenue** | MAPE < 20% | MAPE = 12-18% | MAPE < 12% |
-
-📖 **See [Challenge Description](docs/challenge_description.md) for complete evaluation metrics**
+> **Node version:** 18 or higher recommended.
 
 ---
 
-## ⚠️ Important Rules
+## Outputs
 
-- **Cite Sources**: Always cite external code, tutorials, or resources used.
-- **Educational Use**: This data is for educational purposes only. Do not use for real financial decisions.
+| File | Description |
+|---|---|
+| `outputs/revenue_change_final_audit_predictions.csv` | 2022→2023 audit: actual vs predicted revenue change with absolute errors |
+| `outputs/revenue_change_2024_predictions.csv` | Forward-looking 2024 forecasts from 2023 financial statements (two models: Lasso clean-base + CatBoost) |
 
----
-
-## 📚 Documentation
-
-All detailed information is in the [docs/](docs/) folder:
-
-- **[Challenge Description](docs/challenge_description.md)** - Complete guide (objectives, evaluation, tips, timeline)
-- **[Data Dictionary](docs/data_dictionary.md)** - All variable definitions and data quality notes
-
-**Start with the Challenge Description! It contains everything you need to know.**
+Both CSVs include `company_id`, `ateco_sector`, `region`, `legal_form`, predicted revenue change (%), and predicted production value (€).
 
 ---
 
-## 🚀 Ready to Start?
+## Performance Targets
 
-1. ✅ Read [Challenge Description](docs/challenge_description.md)
-2. ✅ Review [Data Dictionary](docs/data_dictionary.md)
-3. ✅ Run the setup commands above
-4. ✅ Open `notebooks/starter_template.ipynb`
-5. ✅ Start exploring the data!
+| Metric | Minimum | Good | Excellent |
+|---|---|---|---|
+| MAPE | < 20% | 12–18% | < 12% |
 
-**Good luck! Focus on learning and understanding, not just chasing high scores.** 🎓
+Our evaluation also reports TMAPE (trimmed, denominator-safe), WAPE, SMAPE, directional accuracy, and Spearman ρ, which are more informative than raw MAPE on this target.
 
 ---
 
-**Academic Year**: 2024/2025
-**Institution**: LUISS University
+## Key Design Choices
 
-**Questions?** Read the documentation first, then ask for help.
+- **Log-target regression** avoids percentage-error blow-ups near zero while preserving monotonic ordering.
+- **Leakage-free temporal splits** — every fold respects chronological order; grouped priors are recomputed inside each training window.
+- **Regime classification as a supplement** — five-bucket and three-bucket classifiers are reported alongside regression to make results easier to communicate, but they do not replace the main holdout score.
+- **Two-model consensus** — Lasso (clean, interpretable) and CatBoost (nonlinear sensitivity) bracket the uncertainty in final predictions.
+
+---
+
+## Academic Context
+
+This work was completed as part of the Italian Financial Challenge at LUISS University (2024/2025). The dataset covers Italian corporate financial statements and is for educational use only. Do not use these predictions for real financial decisions.
