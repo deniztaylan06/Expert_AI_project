@@ -79,7 +79,6 @@ Expert_AI_project/
 │   ├── challenge_description.md   # Full challenge specification
 │   └── data_dictionary.md         # Variable definitions
 │
-├── images/                        # EDA plots exported from notebook
 └── requirements.txt               # Python dependencies
 ```
 
