@@ -155,7 +155,7 @@ function computeRegionMapData(rows) {
 function computeRegionHistoricalData(rows) {
   const valid = rows.filter(r =>
     r.revenue_change_next !== null && isFinite(r.revenue_change_next) &&
-    r.fiscal_year >= 2018 && r.fiscal_year <= 2022 && r.region
+    r.fiscal_year >= 2018 && r.fiscal_year <= 2020 && r.region
   );
   const byRegion = {};
   for (const r of valid) {
@@ -1797,26 +1797,26 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
             Forecast the <b style={{ color: C.accent }}>percentage change in revenue</b> for the next fiscal year, helping companies with budget planning and investors with valuation.
           </p>
           <p style={{ color: C.light, fontSize: 13, margin: "0 0 10px", lineHeight: 1.6 }}>
-            We work with annual financial statements (balance sheet, income statement, ratios) for Italian companies spanning 2018-2021.
-            The training window covers <b style={{ color: C.gold }}>fiscal years 2018-2020</b>; the held-out test set uses 2022-2023 data.
-            Key challenges include <b style={{ color: C.coral }}>time-series aware validation</b> (no future leakage), handling extreme outliers from M&amp;A events, and the fact that percentage change is a highly volatile target with a weak direct signal.
+            We work with annual financial statements (balance sheet, income statement, ratios) for Italian companies. The labeled training panel covers <b style={{ color: C.gold }}>2018-2021</b>, while later statement rows extend the dashboard and final scoring through <b style={{ color: C.gold }}>2023</b>.
+            Model selection is <b style={{ color: C.coral }}>time-series aware</b>: train on earlier source years, validate on later years, then retrain through 2022 for the forward-looking 2024 forecast.
+            Key challenges include no future leakage, extreme outliers from M&amp;A events, and the fact that percentage change is a highly volatile target with a weak direct signal.
           </p>
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
             <div>
               <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Primary Metric</p>
-              <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: 0 }}>RMSE</p>
-            </div>
-            <div>
-              <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Secondary</p>
-              <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: 0 }}>MAPE · MAE</p>
-            </div>
-            <div>
-              <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Business Metric</p>
               <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: 0 }}>Directional Accuracy</p>
             </div>
             <div>
+              <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Ranking Metric</p>
+              <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: 0 }}>Spearman ρ</p>
+            </div>
+            <div>
+              <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Robust Error</p>
+              <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: 0 }}>WAPE · TMAPE95</p>
+            </div>
+            <div>
               <p style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 2px" }}>Success Target</p>
-              <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: 0 }}>MAPE &lt; 15% · Dir. Acc. &gt; 70%</p>
+              <p style={{ color: C.accent, fontSize: 13, fontWeight: 700, margin: 0 }}>Dir. Acc. &gt; 70% · Spearman ≈ 0.70</p>
             </div>
           </div>
         </div>
@@ -1824,14 +1824,14 @@ function DataOverviewSection({ correlationData, yearsInBusinessData, uniqueCompa
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <KPI label="Unique Companies"   value={uniqueCompanies.toLocaleString()} sub="Distinct entities"          color={C.accent} />
-          <KPI label="Total Observations" value={totalRows.toLocaleString()}        sub="Company-year rows (3 yrs)"  color={C.blue}   />
+          <KPI label="Training Source Rows" value={totalRows.toLocaleString()}      sub="2018-2020 source years"     color={C.blue}   />
           <KPI label="Raw Features"         value="30+"                               sub="Financial & structural"     color={C.gold}   />
-          <KPI label="Fiscal Years"       value="2018-2021"                         sub="4 years of statements"      color={C.purple} />
+          <KPI label="Statement Years"       value="2018-2023"                       sub="training + scoring coverage" color={C.purple} />
         </div>
 
         {/* Data quality notes */}
         <div style={{ marginTop: 14, background: `${C.blue}0C`, border: `1px solid ${C.blue}22`, borderRadius: 8, padding: "10px 14px" }}>
-          <p style={{ color: C.blue, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>🔍 Data Quality Findings</p>
+          <p style={{ color: C.blue, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>Data Quality Findings</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <p style={{ color: C.muted, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
               <b style={{ color: C.light }}>Province encoding (Naples):</b> ~900 apparently missing <code style={{ color: C.blue, fontSize: 11 }}>province</code> values were not truly missing, <b style={{ color: C.light }}>"NA" is the official abbreviation for Naples (Napoli)</b>, which was being parsed as <code style={{ color: C.coral, fontSize: 11 }}>NaN</code>. Corrected before any analysis.
@@ -2234,10 +2234,9 @@ function slowScrollToTop(duration = 1000) {
   requestAnimationFrame(step);
 }
 
-const TAB_ORDER = ["overview","2018","2019","2020","signals","map","summary","features","featsel","models","tuning","advanced","regime","regions2","errors","forecast","scenario"];
+const TAB_ORDER = ["overview","years","signals","map","summary","features","featsel","models","tuning","advanced","regime","regions2","errors","forecast","scenario"];
 const TAB_LABELS = {
-  overview: "Data Overview", "2018": "2018 → 2019", "2019": "2019 → 2020",
-  "2020": "2020 → 2021", signals: "Revenue Signals", map: "Regional Map",
+  overview: "Data Overview", years: "Year Analysis", signals: "Revenue Signals", map: "Regional Map",
   summary: "Summary", features: "Feature Eng.", featsel: "Feature Sel.",
   models: "Model Results", tuning: "Hyperparameter", advanced: "Innovative Ideas",
   regime: "Regime Class.", regions2: "Regional Analysis", forecast: "Final Forecast",
@@ -2318,7 +2317,7 @@ function computeScenarioScore({ sector, region, legalForm, productionValueM, pre
   // Scenario overlays
   let point = score;
   if      (scenario === "recession")    { point = point * 0.45 - 16; }
-  else if (scenario === "sectorBoom")   { point = point * 1.3  + 12; }
+  else if (scenario === "pandemic")      { point = point * 0.5  - 14; if ([55, 56, 49, 50, 51, 52, 53, 90, 91, 92, 93, 47].includes(Number(sector))) point -= 12; }
   else if (scenario === "energyShock")  { point = point * 0.62 - 10; if ([10, 25].includes(Number(sector))) point -= 8; }
   else if (scenario === "ratePressure") { point -= debtAssets > 60 ? 20 : debtAssets > 40 ? 9 : 3; }
   else if (scenario === "geopolitical") { point = point * 0.7  -  7; if (Number(sector) === 56) point -= 10; }
@@ -2388,7 +2387,7 @@ function computeScenarioScore({ sector, region, legalForm, productionValueM, pre
   if (currentRatio < 0.8)    flags.push("Liquidity below critical threshold — monitor short-term obligations closely.");
   if (yearsInBusiness < 3)   flags.push("Young company — limited financial history reduces reliability.");
   if (scenario !== "normal") {
-    const scenarioLabels = { recession: "Recession", sectorBoom: "Sector Boom", energyShock: "Energy Shock", ratePressure: "Rate Pressure", geopolitical: "Geopolitical" };
+    const scenarioLabels = { recession: "Recession", pandemic: "Pandemic / Travel Shock", energyShock: "Energy Shock", ratePressure: "Rate Pressure", geopolitical: "Geopolitical" };
     flags.push(`${scenarioLabels[scenario]} scenario active: the base stress-test estimate has been adjusted.`);
   }
 
@@ -2421,12 +2420,12 @@ const SCENARIO_INFO = {
     body: "Applies a broad negative demand shock. Consumer-facing and cyclical firms usually see weaker orders, slower collections, and lower pricing power.",
     example: "Italy example: weak domestic consumption or falling B2B orders affecting retail, construction suppliers, and smaller manufacturers."
   },
-  sectorBoom: {
-    label: "Sector Boom",
+  pandemic: {
+    label: "Pandemic",
     color: C.blue,
-    title: "Sector-specific tailwind",
-    body: "Amplifies positive momentum for sectors experiencing unusually strong demand. It is not economy-wide growth; it is a targeted sector upside scenario.",
-    example: "Italy example: tourism recovery supporting hotels and food service, public incentives lifting construction, or digital demand supporting IT services."
+    title: "Pandemic / travel shock",
+    body: "Applies a demand and mobility shock. Hospitality, food service, transport, tourism, events, and physical retail receive extra pressure because revenue depends directly on movement and occupancy.",
+    example: "Italy example: lower international arrivals, cancelled events, airline capacity cuts, regional mobility rules, or temporary restrictions affecting hotels, restaurants, and tourism-linked services."
   },
   energyShock: {
     label: "Energy Shock",
@@ -2455,7 +2454,7 @@ function randomProfile() {
   const sectors  = Object.keys(ATECO_NAMES);
   const regions  = ["LOMBARDIA","VENETO","EMILIA-ROMAGNA","LAZIO","TOSCANA","PIEMONTE","CAMPANIA","SICILIA","PUGLIA","MARCHE"];
   const forms    = ["SRL","SPA","SAPA","SNC","SAS"];
-  const scenarios= ["normal","normal","normal","recession","sectorBoom","energyShock","ratePressure"];
+  const scenarios= ["normal","normal","normal","recession","pandemic","energyShock","ratePressure"];
   const rand     = (lo, hi, dec = 0) => Number((Math.random() * (hi - lo) + lo).toFixed(dec));
   return {
     sector:          sectors[Math.floor(Math.random() * sectors.length)],
@@ -2469,6 +2468,68 @@ function randomProfile() {
     yearsInBusiness: rand(1, 35),
     scenario:        scenarios[Math.floor(Math.random() * scenarios.length)],
   };
+}
+
+function YearAnalysisTab({ selectedYear, setSelectedYear, yearsData, yearsCorrelationData, sharedDomains }) {
+  const options = [
+    { year: 2018, label: "2018 → 2019", note: "Pre-COVID baseline", color: C.accent },
+    { year: 2019, label: "2019 → 2020", note: "COVID shock", color: C.blue },
+    { year: 2020, label: "2020 → 2021", note: "Recovery year", color: C.gold },
+  ];
+  const active = options.find(o => o.year === selectedYear) || options[0];
+
+  return (
+    <>
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ color: C.white, fontSize: 24, fontWeight: 700, margin: "0 0 6px", fontFamily: "'Playfair Display', Georgia, serif" }}>
+          Annual Cohort Analysis
+        </h2>
+        <p style={{ color: C.muted, fontSize: 13, margin: "0 0 12px", lineHeight: 1.55 }}>
+          Compare the three labeled source-year cohorts without leaving the analysis page. Each selection uses one fiscal year to predict the following year's revenue change.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+          {options.map(opt => {
+            const isActive = selectedYear === opt.year;
+            return (
+              <button
+                key={opt.year}
+                onClick={() => setSelectedYear(opt.year)}
+                style={{
+                  background: isActive ? `${opt.color}22` : C.card,
+                  border: `1px solid ${isActive ? opt.color : C.border}`,
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  minHeight: 66,
+                  transition: "background 0.15s, border-color 0.15s",
+                }}
+              >
+                <span style={{ display: "block", color: isActive ? opt.color : C.light, fontSize: 14, fontWeight: 800, marginBottom: 3 }}>
+                  {opt.label}
+                </span>
+                <span style={{ display: "block", color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7 }}>
+                  {opt.note}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ background: `${active.color}0D`, border: `1px solid ${active.color}25`, borderRadius: 8, padding: "9px 12px", marginTop: 10 }}>
+          <p style={{ color: active.color, fontSize: 12, fontWeight: 700, margin: 0 }}>
+            Active view: fiscal year {selectedYear}, predicting {yearsData[selectedYear]?.predicting}.
+          </p>
+        </div>
+      </div>
+
+      <YearSection
+        yr={selectedYear}
+        yearsData={yearsData}
+        yearsCorrelation={yearsCorrelationData[selectedYear]}
+        sharedDomains={sharedDomains}
+      />
+    </>
+  );
 }
 
 function BusinessScenarioLabTab() {
@@ -2661,6 +2722,7 @@ export default function App() {
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
   const [tab,        setTab]        = useState("overview");
+  const [selectedYear, setSelectedYear] = useState(2018);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const isFirstRender = useRef(true);
   const [isMobile, setIsMobile] = useState(() => {
@@ -2727,7 +2789,7 @@ export default function App() {
   const part2LeaderboardSplit = isMobile ? "1fr" : "3fr 1fr";
   const part2DecisionSplit = isMobile ? "1fr" : "2fr 1fr";
 
-  const yearColors = { overview: C.white, "2018": C.accent, "2019": C.blue, "2020": C.gold, signals: C.orange, map: C.teal, summary: C.purple, features: "#A78BFA", nextsteps: "#F472B6", featsel: "#38BDF8", models: "#34D399", tuning: "#FB923C", advanced: "#E879F9", regime: "#F87171", regions2: "#22D3EE", forecast: "#FCD34D", errors: "#F472B6", scenario: "#60A5FA" };
+  const yearColors = { overview: C.white, years: C.gold, signals: C.orange, map: C.teal, summary: C.purple, features: "#A78BFA", nextsteps: "#F472B6", featsel: "#38BDF8", models: "#34D399", tuning: "#FB923C", advanced: "#E879F9", regime: "#F87171", regions2: "#22D3EE", forecast: "#FCD34D", errors: "#F472B6", scenario: "#60A5FA" };
 
   if (loading) return (
     <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, fontFamily: "'DM Sans', sans-serif" }}>
@@ -2819,9 +2881,7 @@ export default function App() {
         </p>
         <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none", msOverflowStyle: "none" }} className="tab-bar">
           <Tab active={tab === "overview"}   onClick={() => setTab("overview")}   color={yearColors.overview}>Data Overview</Tab>
-          <Tab active={tab === "2018"}       onClick={() => setTab("2018")}       color={yearColors["2018"]}>2018 → 2019</Tab>
-          <Tab active={tab === "2019"}       onClick={() => setTab("2019")}       color={yearColors["2019"]}>2019 → 2020</Tab>
-          <Tab active={tab === "2020"}       onClick={() => setTab("2020")}       color={yearColors["2020"]}>2020 → 2021</Tab>
+          <Tab active={tab === "years"}      onClick={() => setTab("years")}      color={yearColors.years}>Year Analysis</Tab>
           <Tab active={tab === "signals"}    onClick={() => setTab("signals")}    color={yearColors.signals}>Revenue Signals</Tab>
           <Tab active={tab === "map"}        onClick={() => setTab("map")}        color={yearColors.map}>Regional Map</Tab>
           <Tab active={tab === "summary"}    onClick={() => setTab("summary")}    color={yearColors.summary}>Summary & Comparison</Tab>
@@ -2843,7 +2903,7 @@ export default function App() {
       <div className="main-content" style={{ padding: isMobile ? "12px 14px 32px" : "20px 28px 40px", maxWidth: 1180, margin: "0 auto", width: "100%" }}>
 
         {tab === "overview" && <DataOverviewSection correlationData={correlationData} yearsInBusinessData={yearsInBusinessData} uniqueCompanies={uniqueCompanies} totalRows={totalRows} outliersData={outliersData} missingnessData={missingnessData} />}
-        {["2018","2019","2020"].includes(tab) && <YearSection yr={Number(tab)} yearsData={yearsData} yearsCorrelation={yearsCorrelationData[Number(tab)]} sharedDomains={sharedDomains} />}
+        {tab === "years" && <YearAnalysisTab selectedYear={selectedYear} setSelectedYear={setSelectedYear} yearsData={yearsData} yearsCorrelationData={yearsCorrelationData} sharedDomains={sharedDomains} />}
         {tab === "map" && <ItalyMapTab regionMapData={regionMapData} regionByYear={regionByYear} mapYears={mapYears} />}
 
         {tab === "signals" && (
@@ -3377,7 +3437,7 @@ export default function App() {
                 { label: "Base Candidates", value: "301", color: C.muted, sub: "engineered from raw statements" },
                 { label: "After VIF / Corr Review", value: "63", color: C.gold, sub: "correlation and multicollinearity filter" },
                 { label: "Final Model Features", value: "49", color: C.accent, sub: "selected by Spearman-first composite rule" },
-                { label: "Feature Domains", value: "7", color: C.blue, sub: "economic groupings in the winning set" },
+                { label: "Feature Domains", value: "8", color: C.blue, sub: "economic groupings in the winning set" },
               ].map((s, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 8, padding: "12px 20px", textAlign: "center", flex: "1 1 140px" }}>
                   <div style={{ color: s.color, fontSize: 26, fontWeight: 800, lineHeight: 1 }}>{s.value}</div>
@@ -3387,7 +3447,7 @@ export default function App() {
               ))}
             </div>
 
-            <Heading sub="Seven economic domains in the 49-feature winning set (Experiment A), with key feature names from each">Feature Domains in the Final Model</Heading>
+            <Heading sub="Eight economic domains in the 49-feature winning set (Experiment A), with key feature names from each">Feature Domains in the Final Model</Heading>
             <div className="grid-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {[
                 { name: "Revenue & Growth History", count: "6", type: "Momentum", color: C.accent, desc: "prior_revchg_tier_shift_median, prior_revchg_tier_median, prior_revchg_sector_tier_shift_count, age_bucket_established, age_bucket_mature, large_tier_jump_flag", body: "Prior-year tier shift signals capture whether a company\'s revenue rank moved relative to peers. These momentum features encode mean-reversion risk: companies that jumped tiers sharply tend to revert." },
@@ -3395,9 +3455,9 @@ export default function App() {
                 { name: "Balance Sheet & Leverage", count: "8", type: "Solvency", color: C.blue, desc: "capital_intensity, debt_maturity_ratio, net_debt, leverage, debt_to_assets, equity_gap_direction, debt_buildup_margin_deterioration_flag, debt_funded_expansion_flag", body: "Debt structure and capital intensity features identify whether a company is leveraging up for growth or under financial stress. Equity gap direction detects hidden capital flows not visible in the P&L." },
                 { name: "Sector / ATECO Encoding", count: "13", type: "Sector", color: C.teal, desc: "ateco_sector_68, 46, 10, 56, 45, 47, 71, 25, 41, 62, 77, 82, 43 (one-hot dummies)", body: "ATECO sector dummies for the 13 sectors that survived the VIF filter. Sectors carry structural baseline growth rates, COVID exposure differences, and legal form composition that ratios alone cannot capture." },
                 { name: "Legal Form & Company Age", count: "10", type: "Company", color: C.purple, desc: "legal_form_SPA, SRL, SAS, SNC, SAPA, is_young_company, lifecycle_stage_veteran, age_bucket_established, age_bucket_mature, leverage", body: "Legal form is the single strongest predictor by SHAP value. SPA companies have different ownership structure, governance, and growth behavior than SRL companies. Age buckets encode lifecycle stage effects." },
-                { name: "Region Indicators", count: "4", type: "Geography", color: C.orange, desc: "region_Liguria, region_Toscana, region_Lazio, prior_revchg_sector_tier_shift_count (cross-signal)", body: "Three regional dummies that showed consistent holdout signal. Regional differences in credit access, labor markets, and industrial mix affect revenue dynamics beyond what sector alone captures." },
+                { name: "Region Indicators", count: "3", type: "Geography", color: C.orange, desc: "region_Liguria, region_Toscana, region_Lazio", body: "Three regional dummies that showed consistent holdout signal. Regional differences in credit access, labor markets, and industrial mix affect revenue dynamics beyond what sector alone captures." },
                 { name: "Cost & Efficiency Flags", count: "2", type: "Efficiency", color: "#F472B6", desc: "margin_squeeze_flag, capex_intensity_flag", body: "Binary flags for companies with deteriorating cost efficiency or unusually high capital expenditure intensity. These identify operational stress or investment cycles before they appear in revenue." },
-                { name: "Temporal & COVID Interactions", count: "5", type: "Temporal", color: C.coral, desc: "debt_buildup_margin_deterioration_flag, debt_funded_expansion_flag, margin_squeeze_flag, capex_intensity_flag, large_tier_jump_flag", body: "Flags that combine time-period signals with company characteristics. COVID interaction terms capture which companies were structurally vulnerable when the shock hit, not just which sector they were in." },
+                { name: "Temporal & COVID Interactions", count: "3", type: "Temporal", color: C.coral, desc: "debt_funded_expansion_flag, capex_intensity_flag, large_tier_jump_flag", body: "Flags that combine time-period signals with company characteristics. COVID interaction terms capture which companies were structurally vulnerable when the shock hit, not just which sector they were in." },
               ].map((f, i) => (
                 <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderLeft: `4px solid ${f.color}`, borderRadius: 8, padding: "14px 16px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -3497,7 +3557,7 @@ export default function App() {
             { name: "Revenue / Growth", count: 6, color: C.accent },
             { name: "Profitability", count: 4, color: C.gold },
             { name: "Cost / Efficiency", count: 2, color: C.orange },
-            { name: "Temporal Flags", count: 5, color: C.teal },
+            { name: "Temporal Flags", count: 2, color: C.teal },
           ];
           const maxShap = shap15[0].shap;
           return (
@@ -3566,7 +3626,7 @@ export default function App() {
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700 }}>Domain Composition</p>
                   {domains.map((d, i) => {
-                    const pct = (d.count / 52) * 100;
+                    const pct = (d.count / 49) * 100;
                     return (
                       <div key={i} style={{ marginBottom: 10 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
@@ -3615,14 +3675,14 @@ export default function App() {
           const groupColorMap = { linear: C.gold, advanced: C.accent, baseline: C.coral };
           const rawModels = modelData?.models || [
             { name: "Lasso",            group: "linear",   features: 49, dacc: 74.5225, spear: 0.6841, rmse: 494.7, tag: "BEST OVERALL" },
-            { name: "ElasticNet",       group: "linear",   features: 49, dacc: 74.5225, spear: 0.6838, rmse: 495.1, tag: "" },
-            { name: "LinearRegression", group: "linear",   features: 49, dacc: 74.6248, spear: 0.6829, rmse: 495.0, tag: "Best Dir." },
-            { name: "Ridge",            group: "linear",   features: 49, dacc: 74.4884, spear: 0.6836, rmse: 495.3, tag: "" },
-            { name: "RandomForest",     group: "advanced", features: 49, dacc: 74.4543, spear: 0.6736, rmse: 509.4, tag: "" },
-            { name: "CatBoost",         group: "advanced", features: 49, dacc: 74.2838, spear: 0.6749, rmse: 501.8, tag: "Best Tree" },
-            { name: "LightGBM",         group: "advanced", features: 49, dacc: 73.8745, spear: 0.6634, rmse: 511.5, tag: "" },
-            { name: "XGBoost",          group: "advanced", features: 49, dacc: 73.8745, spear: 0.6595, rmse: 514.7, tag: "" },
-            { name: "BaselineMedian",   group: "baseline", features: 49, dacc: 70.5662, spear: 0.5689, rmse: 549.3, tag: "Baseline" },
+            { name: "ElasticNet",       group: "linear",   features: 49, dacc: 74.5225, spear: 0.6838, rmse: 495.2, tag: "" },
+            { name: "Ridge",            group: "linear",   features: 49, dacc: 74.4884, spear: 0.6836, rmse: 495.8, tag: "" },
+            { name: "LinearRegression", group: "linear",   features: 49, dacc: 74.6248, spear: 0.6829, rmse: 494.2, tag: "Best Dir." },
+            { name: "CatBoost",         group: "advanced", features: 49, dacc: 74.2838, spear: 0.6749, rmse: 505.2, tag: "Best Tree" },
+            { name: "RandomForest",     group: "advanced", features: 49, dacc: 74.4543, spear: 0.6736, rmse: 486.8, tag: "" },
+            { name: "LightGBM",         group: "advanced", features: 49, dacc: 73.8745, spear: 0.6634, rmse: 507.7, tag: "" },
+            { name: "XGBoost",          group: "advanced", features: 49, dacc: 73.8745, spear: 0.6595, rmse: 519.4, tag: "" },
+            { name: "BaselineMedian",   group: "baseline", features: 49, dacc: 70.5662, spear: 0.5689, rmse: 568.8, tag: "Baseline" },
           ];
           const stabColors = [C.blue, C.gold, C.accent];
           const models    = rawModels.map(m => ({ ...m, color: groupColorMap[m.group] || C.muted }));
@@ -3743,7 +3803,7 @@ export default function App() {
         ═══════════════════════════════════════════════════════ */}
         {tab === "tuning" && (() => {
           const tuningRows = modelData?.tuningRows || [
-            { depth: 6, iterations: 300, learningRate: 0.03, wape: 88.69, spear: 0.6801, tmape: 161.7, rmse: 501.8, rank: 1 },
+            { depth: 6, iterations: 300, learningRate: 0.03, wape: 88.69, spear: 0.6805, tmape: 163.4, rmse: 482.6, rank: 1 },
             { depth: 6, iterations: 300, learningRate: 0.05, wape: 88.89, spear: 0.6805, tmape: 163.4, rmse: 503.4, rank: 2 },
             { depth: 4, iterations: 300, learningRate: 0.05, wape: 88.89, spear: 0.6802, tmape: 165.8, rmse: 504.2, rank: 3 },
             { depth: 4, iterations: 500, learningRate: 0.05, wape: 89.01, spear: 0.6794, tmape: 167.4, rmse: 506.8, rank: 4 },
@@ -3814,7 +3874,7 @@ export default function App() {
               </div>
 
               {/* ── TARGET CLIPPING ── */}
-              <Heading sub="P5/P95 clipping is selected because it minimises WAPE, the primary evaluation metric" insight="P5-P95 is the only configuration that improves both WAPE and TMAPE, adding prediction winsorisation hurts both">Target Clipping Sensitivity, WAPE View</Heading>
+              <Heading sub="P5/P95 clipping is selected because it minimises WAPE, the key robust error metric" insight="P5-P95 is the only configuration that improves both WAPE and TMAPE, adding prediction winsorisation hurts both">Target Clipping Sensitivity, WAPE View</Heading>
               <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 700 }}>WAPE by Clipping Strategy <span style={{ color: C.accent, fontWeight: 400, textTransform: "none" }}>(lower = better)</span></p>
@@ -3929,12 +3989,12 @@ export default function App() {
           const challengers = (modelData?.challengers || [
             { name: "Lasso Base (Clean)",   family: "Linear",          dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, rmse: 496.2, rank: 1, tag: "BEST" },
             { name: "Extreme Event Adj.",   family: "Rule-based",      dacc: 75.62, wape: 86.45, spear: 0.7031, tmape: 164.5, rmse: 496.2, rank: 2, tag: "" },
-            { name: "Quantile Calibration", family: "Post-processing", dacc: 75.62, wape: 86.47, spear: 0.7031, tmape: 169.1, rmse: 483.9, rank: 3, tag: "" },
-            { name: "Two-Stage Regime",     family: "Stacked Model",   dacc: 75.48, wape: 86.54, spear: 0.6985, tmape: 165.8, rmse: 499.4, rank: 4, tag: "" },
-            { name: "Peer-Prior Shrinkage", family: "Shrinkage",       dacc: 75.31, wape: 86.58, spear: 0.7009, tmape: 161.7, rmse: 494.2, rank: 5, tag: "Best TMAPE" },
-            { name: "Consensus Median",     family: "Ensemble",        dacc: 75.31, wape: 86.47, spear: 0.7005, tmape: 171.1, rmse: 497.1, rank: 6, tag: "" },
-            { name: "CatBoost Log-Target",  family: "Gradient Boost",  dacc: 75.14, wape: 86.40, spear: 0.6959, tmape: 163.4, rmse: 493.5, rank: 7, tag: "Best WAPE" },
-            { name: "Residual Correction",  family: "Stacked",         dacc: 74.25, wape: 92.40, spear: 0.6937, tmape: 249.8, rmse: 617.2, rank: 8, tag: "REJECTED" },
+            { name: "Quantile Calibration", family: "Post-processing", dacc: 75.62, wape: 86.47, spear: 0.7031, tmape: 169.1, rmse: 494.6, rank: 3, tag: "" },
+            { name: "Two-Stage Regime",     family: "Stacked Model",   dacc: 75.48, wape: 86.54, spear: 0.6985, tmape: 165.8, rmse: 496.3, rank: 4, tag: "" },
+            { name: "Peer-Prior Shrinkage", family: "Shrinkage",       dacc: 75.31, wape: 86.58, spear: 0.7009, tmape: 161.7, rmse: 491.6, rank: 5, tag: "Best TMAPE" },
+            { name: "Consensus Median",     family: "Ensemble",        dacc: 75.31, wape: 86.47, spear: 0.7005, tmape: 171.1, rmse: 487.8, rank: 6, tag: "" },
+            { name: "CatBoost Log-Target",  family: "Gradient Boost",  dacc: 75.14, wape: 86.40, spear: 0.6959, tmape: 163.4, rmse: 496.5, rank: 7, tag: "Best WAPE" },
+            { name: "Residual Correction",  family: "Stacked",         dacc: 74.25, wape: 92.40, spear: 0.6937, tmape: 249.8, rmse: 576.0, rank: 8, tag: "REJECTED" },
           ]).map((c, i) => ({ ...c, color: challColors[i] || C.muted, tagColor: challColors[i] || C.muted }));
           const methods = [
             {
@@ -3951,7 +4011,7 @@ export default function App() {
               icon: "◈",
               how: "After prediction, recalibrate the P10-P90 range using decile-conditioned shrinkage (10 bins, α=0.50). Pulls extreme predictions toward the calibrated conditional median.",
               why: "The raw model is miscalibrated at the tails, it slightly under-predicts the magnitude of large movements. Decile re-scaling recovers directional signal hidden inside the tails.",
-              result: "Matches Consensus on directional accuracy (75.17%) and best SMAPE on holdout.",
+              result: "Matches the clean base on directional accuracy and Spearman, but TMAPE is wider than Lasso on the 2021 holdout.",
             },
             {
               name: "Consensus Median Ensemble",
@@ -3967,7 +4027,7 @@ export default function App() {
               icon: "⊢",
               how: "Stage 1: classify each firm into a revenue regime (<-50%, normal, >+100%). Stage 2: run a regime-conditioned regressor per bucket using separate hyperparameter sets.",
               why: "The target is trimodal, extreme negative, normal, and hypergrowth firms are structurally different. A single tree tries to fit all three with the same split rules. Separate regressors per regime avoid this compromise.",
-              result: "Comparable directional accuracy (75.03%) but better WAPE on the extreme tails where the base model is weakest.",
+              result: "Comparable directional accuracy (75.48%) with a different error profile; useful as a sensitivity check, not as the primary model.",
             },
           ];
           const regimeData = [
@@ -3984,7 +4044,7 @@ export default function App() {
                 <div style={{ flex: 1, height: 1, background: C.border }} />
               </div>
 
-              <Heading sub="8 methods tested on the 2021 locked holdout. Click any column header to sort." insight="Lasso Base ranks #1 because it stays strongest once ranking quality and robust error are prioritised together.">Challenger Methods Leaderboard, 2021 Holdout</Heading>
+              <Heading sub="8 methods tested on the 2021 locked holdout. Click any column header to sort." insight="Lasso remains the clean base; challengers stress-test calibration, peer shrinkage, non-linearity, and tail behaviour.">Challenger Methods Leaderboard, 2021 Holdout</Heading>
               <Card style={{ padding: 0, overflow: "hidden" }}>
                 <SortableTable
                   columns={[
@@ -4177,10 +4237,10 @@ export default function App() {
                   <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: "0 0 18px", textAlign: "center" }}>How It Works</p>
                   <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", flex: 1 }}>
                     {[
-                    { step: "1", title: "Regression first", body: "The Lasso log-target model predicts the continuous revenue change for each company. This is the primary output." },
-                    { step: "2", title: "Bucket the prediction", body: "The continuous prediction is then mapped to one of 3 or 5 regime buckets based on fixed thresholds. No separate classifier is trained on a different feature set." },
-                    { step: "3", title: "Compare to actual buckets", body: "For validation years where actual revenue change is known, we check whether predicted and actual buckets match. This gives weighted F1, macro F1, and balanced accuracy." },
-                    { step: "4", title: "Supplement, not replace", body: "Regime labels are a communication layer on top of regression. The submission CSV contains the raw predicted revenue change; the buckets are added for business readability." },
+                    { step: "1", title: "Regression stays primary", body: "The Lasso log-target model predicts continuous revenue change. This remains the main forecasting output and the basis for the final prediction export." },
+                    { step: "2", title: "Train regime classifier", body: "A separate classifier is trained on the same temporal splits, using fixed revenue-change buckets as labels and a broader 82-feature pool." },
+                    { step: "3", title: "Compare to actual buckets", body: "For validation years where actual revenue change is known, predicted buckets are compared with actual buckets. This gives weighted F1, macro F1, balanced accuracy, and accuracy." },
+                    { step: "4", title: "Supplement, not replace", body: "Regime labels are a communication layer alongside regression. They make the result easier to discuss, but the raw predicted revenue change remains the forecast." },
                     ].map((s, i) => (
                     <div key={i} style={{ display: "flex", gap: 10, padding: "14px 0", borderBottom: i < 3 ? `1px solid ${C.border}` : "none", maxWidth: 700, width: "100%", margin: "0 auto" }}>
                       <span style={{ background: C.gold, color: C.bg, fontSize: 11, fontWeight: 800, width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{s.step}</span>
@@ -4468,13 +4528,12 @@ export default function App() {
             { pct: ">100%",   pct_val: 29.2, label: "Hypergrowth" },
           ]).map((d, i) => ({ ...d, color: pred2024Colors[i] || C.accent }));
 
-          const sfColors    = [C.blue, C.gold, C.accent, C.purple, C.teal];
+          const sfColors    = [C.blue, C.gold, C.accent, C.purple];
           const stabilityFull = (modelData?.stabilityFull || [
             { fold: "18→19",    dacc: 72.94, spear: 0.636 },
             { fold: "18-19→20", dacc: 74.52, spear: 0.684 },
             { fold: "18-20→21", dacc: 75.62, spear: 0.703 },
-            { fold: "18-21→22", dacc: 75.62, spear: 0.703 },
-            { fold: "18-22→23", dacc: 74.16, spear: 0.678 },
+            { fold: "22→23 audit", dacc: 74.16, spear: 0.678 },
           ]).map((s, i) => ({ ...s, color: sfColors[i] || C.accent }));
 
           const kpis = modelData?.finalAuditKPIs || [
@@ -4547,7 +4606,7 @@ export default function App() {
                 </Card>
               </div>
 
-              <Heading sub="Directional accuracy and Spearman ρ across all 5 annual evaluation windows, 2019 through 2023" insight="Consistent directional accuracy 73-75% across 5 years including the COVID shock">Full Cross-Year Stability (5 Folds)</Heading>
+              <Heading sub="Three rolling validation folds plus the observable 2022→2023 final audit" insight="Directional accuracy stays in the 73-75% band from pre-COVID validation through the latest observable audit">Cross-Year Stability and Final Audit</Heading>
               <div style={{ display: "grid", gridTemplateColumns: part2TwoCol, gap: 14 }}>
                 <Card>
                   <p style={{ color: C.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 12px" }}>Directional Accuracy Trend</p>
@@ -4605,8 +4664,8 @@ export default function App() {
                 <Card>
                   <p style={{ color: C.white, fontSize: 16, fontWeight: 700, margin: "0 0 14px", fontFamily: "'Playfair Display', Georgia, serif" }}>Model Decision Table</p>
                   {[
-                    { objective: "Clean base model",          choice: "Lasso (log-target)",               reason: "Best Spearman ρ and WAPE on 2020 validation; most interpretable" },
-                    { objective: "Best holdout transfer",     choice: "Lasso, 75.62% dir. acc",          reason: "Strongest 2021→2022 transfer on direction, ranking, and TMAPE" },
+                    { objective: "Clean base model",          choice: "Lasso (log-target)",               reason: "Best overall clean workflow by the notebook ranking policy; strong rank signal and stable holdout transfer" },
+                    { objective: "Locked holdout choice",     choice: "Lasso, 75.62% dir. acc",          reason: "Ties the top direction result and keeps the strongest ranking signal on the 2021 holdout" },
                     { objective: "Advanced sensitivity check",choice: "CatBoost: depth=6, iter=300",     reason: "Best advanced model; used to stress-test the clean base" },
                     { objective: "Best TMAPE challenger",     choice: "Peer-Prior Shrinkage (161.7% TMAPE)",    reason: "Transfers cleanly; pulls outliers toward sector-size norms" },
                     { objective: "Rejected challenger",       choice: "Residual Correction",              reason: "Appears strong on 2020 but TMAPE degrades sharply on holdout" },

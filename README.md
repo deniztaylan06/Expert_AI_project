@@ -37,7 +37,7 @@ Predicting revenue change from annual balance sheets is not a solved problem. Ac
 | **Target** | Fit on `log(production_value_next)`; convert predictions back to `revenue_change_next` |
 | **Temporal splits** | Selection: `[2018, 2019] -> 2020` / Locked holdout: `[2018, 2019, 2020] -> 2021` |
 | **Feature families** | Lagged growth and acceleration - margin quality - balance-sheet pressure - peer-relative context - regime and event flags |
-| **Feature count** | 49 features selected via SHAP-based importance (profitability cluster variant) |
+| **Feature count** | 49 features selected via a Spearman-first composite rule (profitability cluster variant) |
 | **Models** | Lasso (clean base) + CatBoost (sensitivity check) |
 | **Primary metrics** | Directional accuracy, Spearman rank correlation, TMAPE (95% coverage), WAPE, SMAPE |
 | **Add-on** | Five-bucket and three-bucket regime classifiers for business communication |
