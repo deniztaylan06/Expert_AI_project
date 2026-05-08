@@ -160,7 +160,7 @@ Raw MAPE is not a reliable metric here because near-zero actual revenue changes 
 | WAPE | 86.5% | 86.4% |
 | SMAPE | 106.0% | 106.5% |
 
-Five-bucket regime classifier (supplementary): weighted F1 = 0.53 on holdout.
+Five-bucket regime classifier (supplementary): weighted F1 = 0.49 on holdout.
 Three-bucket regime classifier (supplementary): weighted F1 = 0.56 on holdout.
 
 ---
@@ -170,7 +170,7 @@ Three-bucket regime classifier (supplementary): weighted F1 = 0.56 on holdout.
 - **Log-target regression** avoids percentage-error blow-ups near zero while preserving monotonic ordering.
 - **Leakage-free temporal splits** - every fold respects chronological order; grouped priors are recomputed inside each training window.
 - **Regime classification as a supplement** - five-bucket and three-bucket classifiers are reported alongside regression to make results easier to communicate, but they do not replace the main holdout score.
-- **Two-model consensus** - Lasso (clean, interpretable) and CatBoost (nonlinear sensitivity) bracket the uncertainty in final predictions.
+- **Two-model sensitivity** - Lasso (clean, interpretable) is the primary model; CatBoost is retained as a nonlinear sensitivity check around the final predictions.
 
 ---
 

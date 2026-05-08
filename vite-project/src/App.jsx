@@ -4078,7 +4078,7 @@ export default function App() {
                 />
                 <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`, background: C.cardAlt }}>
                   <p style={{ color: C.muted, fontSize: 11, margin: 0, lineHeight: 1.5 }}>
-                    Default ranking: Spearman ρ desc → WAPE asc → TMAPE₉₅ asc. Click any column to re-sort. Lasso stays first because it combines the strongest ranking quality with the cleanest robust-error profile. CatBoost still posts the <strong style={{ color: C.orange }}>best raw WAPE (86.40%)</strong>.
+                    Default ranking: Spearman ρ desc → WAPE asc → TMAPE₉₅ asc, with direction and winsorised error as tie-breakers. Click any column to re-sort. Lasso stays first because it combines the strongest ranking quality with the cleanest robust-error profile. CatBoost still posts the <strong style={{ color: C.orange }}>best raw WAPE (86.40%)</strong>.
                   </p>
                 </div>
               </Card>
@@ -4113,7 +4113,7 @@ export default function App() {
                   {
                     color: C.accent, icon: "◈", title: "Financial Statement Detail",
                     intro: "Current assets are too broad — cash and unsold inventory signal very differently to a lender or investor.",
-                    items: ["Cash & cash equivalents","Inventory turnover","Receivables & payables","EBITDA","Tax expense","D&A","Debt maturity schedule","Fixed vs. variable rate debt","Customer concentration"],
+                    items: ["Cash & cash equivalents","Inventory turnover","Receivables & payables","Debt maturity schedule","Fixed vs. variable rate debt","Customer concentration"],
                   },
                   {
                     color: C.blue, icon: "◎", title: "Operational Signals",
@@ -4237,7 +4237,7 @@ export default function App() {
                   <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: "0 0 18px", textAlign: "center" }}>How It Works</p>
                   <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", flex: 1 }}>
                     {[
-                    { step: "1", title: "Regression stays primary", body: "The Lasso log-target model predicts continuous revenue change. This remains the main forecasting output and the basis for the final prediction export." },
+                    { step: "1", title: "Regression stays primary", body: "The Lasso log-target model predicts next-year production value, then converts it into revenue_change_next using the current year's observed production value. That derived percentage change remains the main forecast." },
                     { step: "2", title: "Train regime classifier", body: "A separate classifier is trained on the same temporal splits, using fixed revenue-change buckets as labels and a broader 82-feature pool." },
                     { step: "3", title: "Compare to actual buckets", body: "For validation years where actual revenue change is known, predicted buckets are compared with actual buckets. This gives weighted F1, macro F1, balanced accuracy, and accuracy." },
                     { step: "4", title: "Supplement, not replace", body: "Regime labels are a communication layer alongside regression. They make the result easier to discuss, but the raw predicted revenue change remains the forecast." },
@@ -4457,7 +4457,7 @@ export default function App() {
               <Heading sub="Three design choices that make regime classification defensible rather than just a label generator">Design Choices and Why They Matter</Heading>
               <div style={{ display: "grid", gridTemplateColumns: part2ThreeCol, gap: 12 }}>
                 {[
-                  { color: C.accent, title: "Same splits, no separate data", body: "The classifier uses identical 2018-19→2020 and 2018-20→2021 temporal splits as the regression model. There is no separate held-out set for the classifier, because the buckets are derived from the same regression predictions. This avoids a second layer of data leakage risk." },
+                  { color: C.accent, title: "Same splits, no extra data", body: "The classifier uses identical 2018-19→2020 and 2018-20→2021 temporal splits as the regression model. Bucket labels are created from actual revenue_change_next using fixed thresholds, so the classifier is evaluated on the same chronological validation years without adding a new data source." },
                   { color: C.gold,   title: "Fixed thresholds, no adaptive binning", body: "Bucket boundaries (-50%, 0%, 50%, 100%) are defined before any model training. We do not fit the thresholds to the training data or to the class distribution. This means the buckets mean the same thing across all years and all splits." },
                   { color: C.blue,   title: "Broader feature set for classification", body: "The classifier uses a broader feature pool than the 49-feature regression model. That is acceptable here because the task is categorical and the tree-based classifier can absorb wider context without changing the main regression workflow." },
                 ].map((c, i) => (
